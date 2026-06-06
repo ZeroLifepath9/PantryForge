@@ -1,0 +1,77 @@
+from fastapi import APIRouter, HTTPException
+
+from app.schemas import (
+    ApprovedSubstitution,
+    InspiredCookRequest,
+    InspiredCookResponse,
+    InspiredIngredientItem,
+    InspiredSetupRequest,
+    InspiredSetupResponse,
+    InspiredSubstitutionsRequest,
+    InspiredSubstitutionsResponse,
+    SimplifiedStep,
+    SubstitutionItem,
+)
+from app.services.inspired_cook import (
+    generate_inspired_steps,
+    inspired_setup,
+    suggest_substitutions,
+)
+
+router = APIRouter(prefix="/cook", tags=["cook"])
+
+
+@router.post("/inspired/setup", response_model=InspiredSetupResponse)
+async def inspired_setup_endpoint(body: InspiredSetupRequest):
+    try:
+        result, is_mock = await inspired_setup(
+            body.recipe_ids,
+            what_sounds_good=body.what_sounds_good,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return InspiredSetupResponse(
+        meal_title=result["meal_title"],
+        ingredients=[InspiredIngredientItem(**i) for i in result["ingredients"]],
+        recipe_titles=result.get("recipe_titles") or [],
+        mock=is_mock,
+    )
+
+
+@router.post("/inspired/substitutions", response_model=InspiredSubstitutionsResponse)
+async def inspired_substitutions_endpoint(body: InspiredSubstitutionsRequest):
+    try:
+        result, is_mock = await suggest_substitutions(
+            body.recipe_ids,
+            body.available_keys,
+            what_sounds_good=body.what_sounds_good,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return InspiredSubstitutionsResponse(
+        substitutions=[SubstitutionItem(**s) for s in result["substitutions"]],
+        mock=is_mock,
+    )
+
+
+@router.post("/inspired/steps", response_model=InspiredCookResponse)
+async def inspired_steps_endpoint(body: InspiredCookRequest):
+    try:
+        approved = [s.model_dump() for s in body.approved_substitutions]
+        result, is_mock = await generate_inspired_steps(
+            body.recipe_ids,
+            body.available_keys,
+            approved_substitutions=approved,
+            explain_techniques=body.explain_techniques,
+            what_sounds_good=body.what_sounds_good,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return InspiredCookResponse(
+        meal_title=result["meal_title"],
+        steps=[SimplifiedStep(**s) for s in result["steps"]],
+        substitutions_applied=[
+            ApprovedSubstitution(**s) for s in result.get("substitutions_applied") or []
+        ],
+        mock=is_mock,
+    )

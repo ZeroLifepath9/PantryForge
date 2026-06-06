@@ -1,15 +1,36 @@
-"""AI ingredient parsing and step simplification — mock until XAI_API_KEY is set."""
+"""AI step simplification and ingredient parsing."""
 
 from __future__ import annotations
 
+import json
+import re
+from typing import Any
+
 from app.config import settings
 from app.services import mock_data
+from app.services.recipe_search import get_recipe_detail
+from app.services.xai_client import chat_completion
+
+SIMPLIFY_SYSTEM = """You simplify recipe instructions for home cooks.
+Output ONLY valid JSON:
+{
+  "steps": [
+    {"step": 1, "text": "clear instruction", "tip": "beginner tip or null"}
+  ]
+}
+Keep every original step — do not skip steps. If explain_techniques is false, set all tips to null.
+Use plain language. One action per step when possible."""
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
+    if fence:
+        cleaned = fence.group(1).strip()
+    return json.loads(cleaned)
 
 
 async def parse_ingredients(text: str) -> tuple[list[str], bool]:
-    if settings.mock_mode or not settings.xai_api_key:
-        return mock_data.mock_parse_ingredients(text), True
-    # Phase 3: call xAI here
     return mock_data.mock_parse_ingredients(text), True
 
 
@@ -19,16 +40,54 @@ async def simplify_recipe(
     explain_techniques: bool = True,
     skill_level: str = "beginner",
 ) -> tuple[dict | None, bool]:
-    if settings.mock_mode or not settings.xai_api_key:
+    detail, is_mock_detail = await get_recipe_detail(recipe_id)
+    if not detail:
+        return None, True
+
+    direct = skill_level == "direct" or not explain_techniques
+    if not settings.xai_api_key or is_mock_detail:
         result = mock_data.mock_simplify_steps(
             recipe_id,
             explain_techniques=explain_techniques,
             skill_level=skill_level,
         )
         return result, True
-    result = mock_data.mock_simplify_steps(
-        recipe_id,
-        explain_techniques=explain_techniques,
-        skill_level=skill_level,
-    )
-    return result, True
+
+    payload = {
+        "title": detail["title"],
+        "ingredients": detail.get("ingredients") or [],
+        "instructions": detail.get("instructions") or [],
+        "explain_techniques": not direct,
+    }
+    try:
+        text = await chat_completion(
+            system=SIMPLIFY_SYSTEM,
+            user_content=json.dumps(payload, ensure_ascii=False),
+            temperature=0.4,
+        )
+        parsed = _extract_json(text)
+        steps = [
+            {
+                "step": int(s.get("step") or i + 1),
+                "text": str(s.get("text") or ""),
+                "tip": s.get("tip") if not direct else None,
+            }
+            for i, s in enumerate(parsed.get("steps") or [])
+            if s.get("text")
+        ]
+        if not steps:
+            raise ValueError("empty steps")
+        mode = "direct" if direct else "beginner"
+        return {
+            "recipe_id": recipe_id,
+            "title": detail["title"],
+            "mode": mode,
+            "steps": steps,
+        }, False
+    except Exception:
+        result = mock_data.mock_simplify_steps(
+            recipe_id,
+            explain_techniques=explain_techniques,
+            skill_level=skill_level,
+        )
+        return result, True

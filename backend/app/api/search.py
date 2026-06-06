@@ -6,7 +6,11 @@ from app.database import get_db
 from app.deps import get_optional_user
 from app.models import User
 from app.schemas import (
+    CravingParsed,
+    CravingSearchRequest,
+    CravingSearchResponse,
     DietOption,
+    MealRecipeCard,
     MetaResponse,
     ParseIngredientsRequest,
     ParseIngredientsResponse,
@@ -16,6 +20,7 @@ from app.schemas import (
 )
 from app.services import mock_data
 from app.services.cooking_ai import parse_ingredients
+from app.services.craving_search import search_by_craving
 from app.services.recipe_search import search_recipes
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -35,6 +40,24 @@ async def search_meta():
 async def parse_ingredients_endpoint(body: ParseIngredientsRequest):
     ingredients, is_mock = await parse_ingredients(body.text)
     return ParseIngredientsResponse(ingredients=ingredients, mock=is_mock)
+
+
+@router.post("/craving", response_model=CravingSearchResponse)
+async def search_craving_endpoint(body: CravingSearchRequest):
+    payload, is_mock = await search_by_craving(
+        body.what_sounds_good,
+        diets=body.diets,
+        intolerances=body.intolerances,
+        health_conditions=body.health_conditions,
+    )
+    return CravingSearchResponse(
+        what_sounds_good=payload["what_sounds_good"],
+        parsed=CravingParsed(**payload["parsed"]),
+        mains=[MealRecipeCard(**m) for m in payload["mains"]],
+        pairings=[MealRecipeCard(**m) for m in payload["pairings"]],
+        mock=is_mock,
+        message=payload.get("message"),
+    )
 
 
 @router.post("/recipes", response_model=SearchRecipesResponse)

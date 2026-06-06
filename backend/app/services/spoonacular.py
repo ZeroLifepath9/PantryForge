@@ -353,3 +353,166 @@ async def get_recipe_detail(recipe_id: int) -> dict[str, Any] | None:
     if not info:
         return None
     return _map_recipe_detail(info)
+
+
+def _spoon_diet_param(diets: list[str]) -> str | None:
+    if not diets:
+        return None
+    return ",".join(DIET_MAP.get(d, d.replace("-", " ")) for d in diets)
+
+
+def _classify_dish_category(dish_types: list[str], title: str) -> str:
+    types = " ".join(dish_types).lower()
+    title_lower = title.lower()
+    if any(t in types for t in ("salad", "salads")) or "salad" in title_lower:
+        return "salad"
+    if any(t in types for t in ("dip", "sauce", "condiment", "spread")) or "dip" in title_lower:
+        return "dip"
+    if any(
+        t in types
+        for t in ("side dish", "antipasti", "appetizer", "beverage", "soup", "starter")
+    ):
+        return "side"
+    if "bruschetta" in title_lower or "bread" in title_lower and "main" not in types:
+        return "side"
+    return "main"
+
+
+def _map_complex_card(info: dict[str, Any], *, category: str) -> dict[str, Any]:
+    diets_raw = info.get("diets") or []
+    diets = []
+    for d in diets_raw:
+        key = d.lower().replace(" ", "-")
+        if key == "pescatarian":
+            key = "pescetarian"
+        diets.append(key)
+    return {
+        "id": info["id"],
+        "title": info.get("title") or "Recipe",
+        "category": category,
+        "image": info.get("image"),
+        "summary": _strip_html(info.get("summary")),
+        "ready_in_minutes": info.get("readyInMinutes"),
+        "servings": info.get("servings"),
+        "source_url": info.get("sourceUrl"),
+        "diets": diets,
+    }
+
+
+async def complex_search(
+    *,
+    query: str,
+    number: int = 10,
+    diets: list[str] | None = None,
+    intolerances: list[str] | None = None,
+    dish_type: str | None = None,
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {
+        "query": query,
+        "number": number,
+        "addRecipeInformation": True,
+        "fillIngredients": False,
+        "instructionsRequired": True,
+    }
+    diet_param = _spoon_diet_param(diets or [])
+    if diet_param:
+        params["diet"] = diet_param
+    if intolerances:
+        params["intolerances"] = ",".join(intolerances)
+    if dish_type:
+        params["type"] = dish_type
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        data = await _request(client, "/recipes/complexSearch", params=params)
+
+    results: list[dict[str, Any]] = []
+    for item in data.get("results") or []:
+        if diets and not _recipe_diets_match(item.get("diets") or [], diets):
+            continue
+        if intolerances and not _recipe_intolerances_ok(item, intolerances):
+            continue
+        dish_types = item.get("dishTypes") or []
+        category = _classify_dish_category(dish_types, item.get("title") or "")
+        if dish_type == "main course" and category != "main":
+            category = "main"
+        results.append(_map_complex_card(item, category=category))
+    return results
+
+
+async def search_by_craving(
+    parsed: dict[str, Any],
+    *,
+    diets: list[str] | None = None,
+    intolerances: list[str] | None = None,
+) -> dict[str, Any]:
+    diets = diets or []
+    intolerances = intolerances or []
+    main_query = parsed.get("main_query") or "dinner"
+    protein = parsed.get("protein")
+
+    mains_raw = await complex_search(
+        query=main_query,
+        number=12,
+        diets=diets,
+        intolerances=intolerances,
+        dish_type="main course",
+    )
+
+    mains: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for card in mains_raw:
+        if card["id"] in seen:
+            continue
+        title_norm = _normalize(card["title"])
+        if protein and protein not in title_norm and protein not in _normalize(card.get("summary") or ""):
+            continue
+        card["category"] = "main"
+        mains.append(card)
+        seen.add(card["id"])
+        if len(mains) >= 5:
+            break
+
+    if len(mains) < 5:
+        for card in mains_raw:
+            if card["id"] in seen:
+                continue
+            card["category"] = "main"
+            mains.append(card)
+            seen.add(card["id"])
+            if len(mains) >= 5:
+                break
+
+    pairings: list[dict[str, Any]] = []
+    pairing_queries = parsed.get("pairing_queries") or ["side salad", "vegetable side"]
+    for pq in pairing_queries:
+        if len(pairings) >= 20:
+            break
+        batch = await complex_search(
+            query=pq,
+            number=8,
+            diets=diets,
+            intolerances=intolerances,
+        )
+        for card in batch:
+            if card["id"] in seen:
+                continue
+            if card["category"] == "main":
+                card["category"] = "side"
+            if card["category"] not in ("side", "salad", "dip"):
+                card["category"] = "side"
+            pairings.append(card)
+            seen.add(card["id"])
+            if len(pairings) >= 20:
+                break
+
+    message = None
+    if not mains:
+        message = "No main courses matched — try rephrasing what sounds good or loosen diet filters."
+    elif mains and not pairings:
+        message = "Found mains; add pairing ideas by mentioning sides or salads in your craving."
+
+    return {
+        "mains": mains[:5],
+        "pairings": pairings[:20],
+        "message": message,
+    }

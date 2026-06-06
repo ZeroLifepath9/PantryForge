@@ -3,6 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 MatchTier = Literal["exact", "almost", "stretch"]
+DishCategory = Literal["main", "side", "salad", "dip"]
 
 
 class RegisterRequest(BaseModel):
@@ -184,3 +185,103 @@ class AdvisorInsightsResponse(BaseModel):
     mock: bool = False
     xai_configured: bool = False
     prompt_version: str | None = None
+
+
+class CravingParsed(BaseModel):
+    protein: str | None = None
+    starches: list[str] = []
+    flavors: list[str] = []
+    cuisine: str | None = None
+    mood: str | None = None
+    main_query: str = ""
+    pairing_queries: list[str] = []
+    search_terms: list[str] = []
+
+
+class MealRecipeCard(BaseModel):
+    id: int
+    title: str
+    category: DishCategory
+    image: str | None = None
+    summary: str | None = None
+    ready_in_minutes: int | None = None
+    servings: int | None = None
+    source_url: str | None = None
+    diets: list[str] = []
+
+
+class CravingSearchRequest(BaseModel):
+    what_sounds_good: str = Field(min_length=1, max_length=500)
+    diets: list[str] = []
+    intolerances: list[str] = []
+    health_conditions: list[str] = []
+
+
+class CravingSearchResponse(BaseModel):
+    what_sounds_good: str
+    parsed: CravingParsed
+    mains: list[MealRecipeCard] = []
+    pairings: list[MealRecipeCard] = []
+    mock: bool = False
+    message: str | None = None
+
+
+class InspiredIngredientItem(BaseModel):
+    key: str
+    name: str
+    amount: str | None = None
+    role: str = "ingredient"
+    recipe_id: int
+    recipe_title: str
+
+
+class InspiredSetupRequest(BaseModel):
+    recipe_ids: list[int] = Field(min_length=1)
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+
+
+class InspiredSetupResponse(BaseModel):
+    meal_title: str
+    ingredients: list[InspiredIngredientItem]
+    recipe_titles: list[str] = []
+    mock: bool = False
+
+
+class SubstitutionItem(BaseModel):
+    original_key: str
+    original_name: str
+    substitute: str
+    purpose: str
+    note: str
+
+
+class InspiredSubstitutionsRequest(BaseModel):
+    recipe_ids: list[int] = Field(min_length=1)
+    available_keys: list[str] = []
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+
+
+class InspiredSubstitutionsResponse(BaseModel):
+    substitutions: list[SubstitutionItem] = []
+    mock: bool = False
+
+
+class ApprovedSubstitution(BaseModel):
+    original_key: str
+    original_name: str
+    substitute: str
+
+
+class InspiredCookRequest(BaseModel):
+    recipe_ids: list[int] = Field(min_length=1)
+    available_keys: list[str] = []
+    approved_substitutions: list[ApprovedSubstitution] = []
+    explain_techniques: bool = True
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+
+
+class InspiredCookResponse(BaseModel):
+    meal_title: str
+    steps: list[SimplifiedStep]
+    substitutions_applied: list[ApprovedSubstitution] = []
+    mock: bool = False

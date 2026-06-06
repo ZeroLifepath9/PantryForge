@@ -2,113 +2,16 @@ const API = "";
 let token = localStorage.getItem("pf_token") || "";
 let isGuest = false;
 let meta = { diets: [], intolerances: [], health_conditions: [], mock_mode: true };
-let lastResults = [];
-let lastSearchContext = { ingredients: [], effective: [] };
-let currentRecipeId = null;
+let lastCraving = null;
+let selectedIds = new Set();
+let inspiredSetup = null;
+let pendingSubstitutions = [];
+let approvedSubs = [];
 let stepMode = "beginner";
+let currentRecipeId = null;
 let prefsSaveTimer = null;
 
 const $ = (id) => document.getElementById(id);
-
-const COMPOUND_INGREDIENTS = [
-  "olive oil",
-  "vegetable oil",
-  "coconut oil",
-  "sesame oil",
-  "bell pepper",
-  "green onion",
-  "red onion",
-  "sweet potato",
-  "sour cream",
-  "cream cheese",
-  "goat cheese",
-  "parmesan cheese",
-  "cheddar cheese",
-  "brown sugar",
-  "powdered sugar",
-  "soy sauce",
-  "fish sauce",
-  "hot sauce",
-  "baking powder",
-  "baking soda",
-  "black pepper",
-  "ground beef",
-  "chicken breast",
-  "chicken thigh",
-];
-
-const COMPOUND_STARTS = new Set(
-  COMPOUND_INGREDIENTS.map((p) => p.split(" ")[0]).filter((w) => w.length > 2)
-);
-
-function tokenizeIngredientLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return [];
-  if (trimmed.includes(",")) {
-    return trimmed
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-  }
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  const tokens = [];
-  let i = 0;
-  while (i < words.length) {
-    let matched = null;
-    for (let len = Math.min(4, words.length - i); len >= 2; len -= 1) {
-      const phrase = words.slice(i, i + len).join(" ").toLowerCase();
-      if (COMPOUND_INGREDIENTS.includes(phrase)) {
-        matched = words.slice(i, i + len).join(" ");
-        i += len;
-        break;
-      }
-    }
-    if (matched) {
-      tokens.push(matched);
-    } else {
-      const word = words[i];
-      if (!/^\d+$/.test(word)) tokens.push(word);
-      i += 1;
-    }
-  }
-  return tokens;
-}
-
-function formatIngredientText(text) {
-  const lines = text.split("\n");
-  const formatted = lines
-    .map((line) => {
-      const tokens = tokenizeIngredientLine(line);
-      return tokens.join(", ");
-    })
-    .filter((line, idx, arr) => line || idx < arr.length - 1);
-  return formatted.join("\n").replace(/,\s*,+/g, ", ").replace(/,\s*$/gm, "");
-}
-
-function autoCommaOnInput(el) {
-  const value = el.value;
-  const pos = el.selectionStart;
-  if (pos === null || pos < 2) return;
-
-  const before = value.slice(0, pos);
-  const after = value.slice(pos);
-  if (!before.endsWith(" ")) return;
-
-  const lineStart = before.lastIndexOf("\n") + 1;
-  const line = before.slice(lineStart);
-  if (line.includes(",")) return;
-
-  const words = line.trimEnd().split(/\s+/).filter(Boolean);
-  if (words.length < 2) return;
-
-  const prevWord = words[words.length - 2].toLowerCase();
-  if (COMPOUND_STARTS.has(prevWord)) return;
-
-  const newBefore = before.slice(0, -1) + ", ";
-  el.value = newBefore + after;
-  const newPos = newBefore.length;
-  el.setSelectionRange(newPos, newPos);
-}
 
 function formatApiError(data, fallback = "Request failed") {
   const detail = data?.detail;
@@ -135,12 +38,9 @@ async function api(path, options = {}) {
 }
 
 function setStatus(el, msg, isError = false) {
+  if (!el) return;
   el.textContent = msg || "";
   el.classList.toggle("error", !!isError);
-}
-
-function tierClass(tier) {
-  return `tier tier-${tier}`;
 }
 
 function selectedDiets() {
@@ -152,20 +52,21 @@ function selectedIntolerances() {
 }
 
 function selectedHealthConditions() {
-  return [...document.querySelectorAll("#health-condition-options input:checked")].map(
-    (el) => el.value
-  );
+  return [...document.querySelectorAll("#health-condition-options input:checked")].map((el) => el.value);
+}
+
+function soundsGoodText() {
+  return $("sounds-good-input")?.value?.trim() || "";
 }
 
 function renderChipOptions(containerId, options, name, extraClass = "") {
   const wrap = $(containerId);
   if (!wrap) return;
-  const chips = options || [];
-  if (!chips.length) {
+  if (!options?.length) {
     wrap.innerHTML = `<p class="fieldset-hint">No options available.</p>`;
     return;
   }
-  wrap.innerHTML = chips
+  wrap.innerHTML = options
     .map(
       (d) =>
         `<label class="chip chip-token ${extraClass}"><input type="checkbox" name="${name}" value="${d.value}" />${d.label}</label>`
@@ -173,27 +74,9 @@ function renderChipOptions(containerId, options, name, extraClass = "") {
     .join("");
 }
 
-function renderDietOptions() {
-  renderChipOptions("diet-options", meta.diets, "diet", "chip-diet");
-}
-
-function renderIntoleranceOptions() {
-  renderChipOptions("intolerance-options", meta.intolerances, "intolerance", "chip-allergy");
-}
-
-function renderHealthConditionOptions() {
-  renderChipOptions(
-    "health-condition-options",
-    meta.health_conditions,
-    "health-condition",
-    "chip-medical"
-  );
-}
-
 function applyPreferences(prefs) {
   if (!prefs) return;
   $("explain-techniques").checked = prefs.explain_techniques;
-  $("include-pantry").checked = prefs.include_pantry_staples;
   document.querySelectorAll("#diet-options input").forEach((el) => {
     el.checked = prefs.diets.includes(el.value);
   });
@@ -221,7 +104,7 @@ async function savePreferences() {
         intolerances: selectedIntolerances(),
         health_conditions: selectedHealthConditions(),
         explain_techniques: $("explain-techniques").checked,
-        include_pantry_staples: $("include-pantry").checked,
+        include_pantry_staples: true,
       }),
     });
   } catch {
@@ -229,18 +112,22 @@ async function savePreferences() {
   }
 }
 
+function hideAllPanels() {
+  ["landing-panel", "search-panel", "results-panel", "inspired-panel", "cook-panel", "recipe-panel"].forEach(
+    (id) => $(id)?.classList.add("hidden")
+  );
+}
+
 function showLanding() {
+  hideAllPanels();
   $("landing-panel").classList.remove("hidden");
-  $("search-panel").classList.add("hidden");
-  $("results-panel").classList.add("hidden");
-  $("recipe-panel").classList.add("hidden");
   $("session-badge").classList.add("hidden");
   $("auth-user").classList.add("hidden");
   $("sign-out").classList.add("hidden");
 }
 
 function showApp(displayName = "", guest = false) {
-  $("landing-panel").classList.add("hidden");
+  hideAllPanels();
   $("search-panel").classList.remove("hidden");
   $("sign-out").classList.remove("hidden");
   isGuest = guest;
@@ -256,176 +143,297 @@ function showApp(displayName = "", guest = false) {
 }
 
 function categoryLabel(cat) {
-  const labels = {
-    main: "Main",
-    side: "Side",
-    salad: "Salad",
-    dip: "Dip",
-    upgrade: "Upgrade",
-    pairing: "Pairing",
-  };
-  return labels[cat] || cat;
+  return { main: "Main", side: "Side", salad: "Salad", dip: "Dip" }[cat] || cat;
 }
 
-function renderAdvisor(data) {
-  const panel = $("advisor-panel");
-  if (!data) {
-    panel.classList.add("hidden");
-    return;
-  }
-  panel.classList.remove("hidden");
-  $("advisor-headline").textContent = data.headline || "Kitchen advisor";
-  $("advisor-summary").textContent = data.summary || "";
-  const badge = $("advisor-badge");
-  if (data.mock && !data.xai_configured) {
-    badge.textContent = "Guidance mode";
-    badge.classList.remove("hidden");
-  } else if (data.mock) {
-    badge.textContent = "AI fallback";
-    badge.classList.remove("hidden");
-  } else {
-    badge.textContent = "AI advisor";
-    badge.classList.remove("hidden");
-  }
+function renderMealCard(recipe, listId) {
+  const checked = selectedIds.has(recipe.id);
+  const catClass = `meal-card-${recipe.category}`;
+  return `
+    <label class="meal-card ${catClass} ${checked ? "meal-card-selected" : ""}">
+      <input type="checkbox" class="meal-select" data-recipe-id="${recipe.id}" ${checked ? "checked" : ""} />
+      <img class="result-thumb" src="${recipe.image || ""}" alt="" loading="lazy" />
+      <div class="meal-card-body">
+        <span class="meal-card-cat">${categoryLabel(recipe.category)}</span>
+        <strong class="result-title">${recipe.title}</strong>
+        <p class="meal-card-summary">${recipe.summary || ""}</p>
+        ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
+        <button type="button" class="btn-ghost btn-small view-recipe-btn" data-view-recipe="${recipe.id}">View recipe</button>
+      </div>
+    </label>`;
+}
 
-  const picks = $("advisor-picks");
-  picks.innerHTML = (data.top_picks || [])
-    .map(
-      (p) => `
-      <article class="advisor-pick advisor-pick-${p.category}">
-        <span class="advisor-pick-cat">${categoryLabel(p.category)}</span>
-        <strong>${p.title}</strong>
-        <p>${p.why}</p>
-        ${
-          p.recipe_id
-            ? `<button type="button" class="btn-ghost advisor-open-recipe" data-open-recipe="${p.recipe_id}">Open recipe</button>`
-            : ""
-        }
-      </article>`
-    )
-    .join("");
+function updateSelectionUI() {
+  const count = selectedIds.size;
+  $("selection-count").textContent = count
+    ? `${count} selected — pick mains and sides, then cook inspired by your choices.`
+    : "Select mains, sides, and salads to cook inspired by.";
+  $("inspired-btn").disabled = count === 0;
+}
 
-  picks.querySelectorAll(".advisor-open-recipe").forEach((btn) => {
-    btn.addEventListener("click", () => openRecipe(Number(btn.dataset.openRecipe)));
+function bindMealCards(container) {
+  container.querySelectorAll(".meal-select").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const id = Number(e.target.dataset.recipeId);
+      if (e.target.checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+      e.target.closest(".meal-card")?.classList.toggle("meal-card-selected", e.target.checked);
+      updateSelectionUI();
+    });
   });
-
-  $("advisor-sections").innerHTML = (data.sections || [])
-    .map(
-      (s) => `
-      <article class="advisor-section">
-        <h4>${s.heading}</h4>
-        <p>${s.body}</p>
-      </article>`
-    )
-    .join("");
-  setStatus($("advisor-status"), "");
+  container.querySelectorAll(".view-recipe-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openRecipe(Number(btn.dataset.viewRecipe));
+    });
+  });
 }
 
-async function loadAdvisorInsights(searchData) {
-  const ingredients = searchData.effective_ingredients?.length
-    ? searchData.effective_ingredients
-    : lastSearchContext.ingredients;
-  if (!ingredients?.length || !lastResults.length) {
-    renderAdvisor(null);
+function renderParsedCraving(parsed) {
+  const el = $("parsed-craving");
+  if (!parsed) {
+    el.classList.add("hidden");
     return;
   }
-  $("advisor-panel").classList.remove("hidden");
-  $("advisor-headline").textContent = "Kitchen advisor";
-  $("advisor-summary").textContent = "Reading your pantry and restrictions…";
-  $("advisor-picks").innerHTML = "";
-  $("advisor-sections").innerHTML = "";
-  setStatus($("advisor-status"), "Getting insights…");
+  const chips = [];
+  if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
+  if (parsed.starches?.length) chips.push(`Starches: ${parsed.starches.join(", ")}`);
+  if (parsed.mood) chips.push(`Mood: ${parsed.mood}`);
+  if (parsed.main_query) chips.push(`Searching: ${parsed.main_query}`);
+  if (!chips.length) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = chips.map((c) => `<span>${c}</span>`).join("");
+}
+
+function renderCravingResults(data) {
+  lastCraving = data;
+  selectedIds = new Set();
+  $("results-panel").classList.remove("hidden");
+  $("inspired-panel").classList.add("hidden");
+  $("cook-panel").classList.add("hidden");
+
+  const total = (data.mains?.length || 0) + (data.pairings?.length || 0);
+  $("results-heading").textContent = total ? `Your meal ideas (${total})` : "Your meal ideas";
+  $("results-message").textContent = data.message || "";
+  renderParsedCraving(data.parsed);
+
+  const mainsList = $("mains-list");
+  const pairingsList = $("pairings-list");
+
+  if (!data.mains?.length && !data.pairings?.length) {
+    mainsList.innerHTML = `<p class="hint">No matches. Try naming a protein or starch, or loosen diet filters.</p>`;
+    pairingsList.innerHTML = "";
+    updateSelectionUI();
+    return;
+  }
+
+  mainsList.innerHTML = (data.mains || []).map((r) => renderMealCard(r, "mains")).join("");
+  pairingsList.innerHTML = (data.pairings || []).map((r) => renderMealCard(r, "pairings")).join("");
+  bindMealCards(mainsList);
+  bindMealCards(pairingsList);
+  updateSelectionUI();
+  $("results-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function runSearch() {
+  const text = soundsGoodText();
+  if (!text) {
+    setStatus($("search-status"), "Tell me what sounds good first.", true);
+    return;
+  }
+  setStatus($("search-status"), "Understanding your craving…");
+  $("search-btn").disabled = true;
   try {
-    const soundsGood = $("sounds-good-input")?.value?.trim() || null;
-    const data = await api("/advisor/insights", {
+    await savePreferences();
+    const data = await api("/search/craving", {
       method: "POST",
       body: JSON.stringify({
-        ingredients,
+        what_sounds_good: text,
         diets: selectedDiets(),
         intolerances: selectedIntolerances(),
         health_conditions: selectedHealthConditions(),
-        recipes: lastResults,
-        what_sounds_good: soundsGood,
-        deeper_insight: $("explain-techniques")?.checked ?? false,
       }),
     });
-    renderAdvisor(data);
+    renderCravingResults(data);
+    setStatus($("search-status"), data.mock ? "Showing guidance-mode results." : "Meal ideas ready.");
   } catch (err) {
-    setStatus($("advisor-status"), `Advisor: ${err.message}`, true);
+    setStatus($("search-status"), err.message, true);
+  } finally {
+    $("search-btn").disabled = false;
   }
 }
 
-function renderResults(data) {
-  lastResults = data.results || [];
-  lastSearchContext = {
-    ingredients: data.query_ingredients || [],
-    effective: data.effective_ingredients || [],
-  };
-  $("results-panel").classList.remove("hidden");
-  $("recipe-panel").classList.add("hidden");
-  const count = lastResults.length;
-  $("results-heading").textContent = count ? `Your options (${count})` : "Your options";
-  $("results-message").textContent = data.message || "";
-  const parsed = $("parsed-ingredients");
-  if (data.effective_ingredients?.length) {
-    parsed.classList.remove("hidden");
-    parsed.innerHTML = data.effective_ingredients
-      .map((i) => `<span>${i}</span>`)
-      .join("");
-  } else {
-    parsed.classList.add("hidden");
-  }
+async function openInspiredPanel() {
+  if (!selectedIds.size) return;
+  setStatus($("inspired-status"), "Loading ingredients…");
+  $("results-panel").classList.add("hidden");
+  $("inspired-panel").classList.remove("hidden");
+  $("substitutions-block").classList.add("hidden");
+  $("start-cook-btn").disabled = true;
+  approvedSubs = [];
+  pendingSubstitutions = [];
 
-  const list = $("results-list");
-  if (!lastResults.length) {
-    list.innerHTML = `<p class="hint">No matches. Try adding pasta, oil, or cheese — or loosen diet filters.</p>`;
-    renderAdvisor(null);
+  try {
+    const data = await api("/cook/inspired/setup", {
+      method: "POST",
+      body: JSON.stringify({
+        recipe_ids: [...selectedIds],
+        what_sounds_good: soundsGoodText() || null,
+      }),
+    });
+    inspiredSetup = data;
+    $("inspired-title").textContent = data.meal_title;
+    const list = $("pantry-checklist");
+    list.innerHTML = (data.ingredients || [])
+      .map(
+        (ing) => `
+        <label class="pantry-item">
+          <input type="checkbox" class="pantry-have" data-ing-key="${ing.key}" checked />
+          <span>
+            <strong>${ing.name}</strong>
+            ${ing.amount ? `<em>${ing.amount}</em>` : ""}
+            <span class="hint">${ing.recipe_title} · ${ing.role}</span>
+          </span>
+        </label>`
+      )
+      .join("");
+    setStatus($("inspired-status"), "");
+  } catch (err) {
+    setStatus($("inspired-status"), err.message, true);
+  }
+}
+
+function availableKeys() {
+  return [...document.querySelectorAll(".pantry-have:checked")].map((el) => el.dataset.ingKey);
+}
+
+function renderSubstitutions(subs) {
+  pendingSubstitutions = subs || [];
+  const block = $("substitutions-block");
+  if (!pendingSubstitutions.length) {
+    block.classList.add("hidden");
+    $("start-cook-btn").disabled = false;
     return;
   }
-
-  list.innerHTML = lastResults
-    .map((r) => {
-      const missed = (r.missed_ingredients || [])
-        .map((m) => `<span class="missed">${m.name}</span>`)
-        .join("");
-      const used = (r.used_ingredients || [])
-        .map((m) => `<span>${m.name}</span>`)
-        .join("");
-      return `
-        <details class="result-card">
-          <summary>
-            <img class="result-thumb" src="${r.image || ""}" alt="" loading="lazy" />
-            <div>
-              <div class="result-title">${r.title}</div>
-              <div class="${tierClass(r.match_tier)}">${r.match_label}</div>
-            </div>
-          </summary>
-          <div class="result-body">
-            <p>${r.summary || ""}</p>
-            ${r.ready_in_minutes ? `<p class="hint">${r.ready_in_minutes} min · ${r.servings || "?"} servings</p>` : ""}
-            ${used ? `<div class="ingredient-row">${used}</div>` : ""}
-            ${missed ? `<p class="hint">Still need:</p><div class="ingredient-row">${missed}</div>` : ""}
-            <div class="card-actions">
-              <button type="button" class="btn-primary" data-open-recipe="${r.id}">Cook this</button>
-              ${r.source_url ? `<a href="${r.source_url}" target="_blank" rel="noopener">Original recipe</a>` : ""}
-              ${r.video_url ? `<a href="${r.video_url}" target="_blank" rel="noopener">Watch video</a>` : ""}
-            </div>
-          </div>
-        </details>`;
-    })
+  block.classList.remove("hidden");
+  $("substitutions-list").innerHTML = pendingSubstitutions
+    .map(
+      (s, i) => `
+      <label class="sub-item">
+        <input type="checkbox" class="sub-approve" data-sub-idx="${i}" />
+        <div>
+          <strong>${s.original_name}</strong> → <strong>${s.substitute}</strong>
+          <p class="hint">${s.purpose}: ${s.note}</p>
+        </div>
+      </label>`
+    )
     .join("");
-
-  list.querySelectorAll("[data-open-recipe]").forEach((btn) => {
-    btn.addEventListener("click", () => openRecipe(Number(btn.dataset.openRecipe)));
+  $("start-cook-btn").disabled = true;
+  document.querySelectorAll(".sub-approve").forEach((cb) => {
+    cb.addEventListener("change", updateApprovedSubs);
   });
+}
 
-  $("results-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-  loadAdvisorInsights(data);
+function updateApprovedSubs() {
+  approvedSubs = [];
+  document.querySelectorAll(".sub-approve").forEach((cb) => {
+    if (!cb.checked) return;
+    const sub = pendingSubstitutions[Number(cb.dataset.subIdx)];
+    if (sub) {
+      approvedSubs.push({
+        original_key: sub.original_key,
+        original_name: sub.original_name,
+        substitute: sub.substitute,
+      });
+    }
+  });
+  const allHandled =
+    pendingSubstitutions.length === 0 ||
+    document.querySelectorAll(".sub-approve:checked").length > 0 ||
+    availableKeys().length === (inspiredSetup?.ingredients?.length || 0);
+  $("start-cook-btn").disabled = !allHandled && pendingSubstitutions.length > 0
+    ? document.querySelectorAll(".sub-approve:checked").length === 0
+    : false;
+  if (availableKeys().length === (inspiredSetup?.ingredients?.length || 0)) {
+    $("start-cook-btn").disabled = false;
+  }
+}
+
+async function suggestSubstitutions() {
+  if (!selectedIds.size) return;
+  setStatus($("inspired-status"), "Finding alternatives…");
+  try {
+    const data = await api("/cook/inspired/substitutions", {
+      method: "POST",
+      body: JSON.stringify({
+        recipe_ids: [...selectedIds],
+        available_keys: availableKeys(),
+        what_sounds_good: soundsGoodText() || null,
+      }),
+    });
+    renderSubstitutions(data.substitutions);
+    if (!data.substitutions?.length) {
+      setStatus($("inspired-status"), "You have everything listed — ready to cook.");
+      $("start-cook-btn").disabled = false;
+    } else {
+      setStatus($("inspired-status"), "Approve the swaps you want to use.");
+    }
+  } catch (err) {
+    setStatus($("inspired-status"), err.message, true);
+  }
+}
+
+async function startInspiredCook() {
+  if (!selectedIds.size) return;
+  setStatus($("inspired-status"), "Building your cooking plan…");
+  $("start-cook-btn").disabled = true;
+  try {
+    const explain = $("explain-techniques").checked && stepMode === "beginner";
+    const data = await api("/cook/inspired/steps", {
+      method: "POST",
+      body: JSON.stringify({
+        recipe_ids: [...selectedIds],
+        available_keys: availableKeys(),
+        approved_substitutions: approvedSubs,
+        explain_techniques: explain,
+        what_sounds_good: soundsGoodText() || null,
+      }),
+    });
+    renderCookPanel(data);
+    setStatus($("inspired-status"), "");
+  } catch (err) {
+    setStatus($("inspired-status"), err.message, true);
+    $("start-cook-btn").disabled = false;
+  }
+}
+
+function renderCookPanel(data) {
+  $("inspired-panel").classList.add("hidden");
+  $("cook-panel").classList.remove("hidden");
+  $("cook-title").textContent = data.meal_title;
+  const subNote = data.substitutions_applied?.length
+    ? `${data.substitutions_applied.length} substitution(s) applied`
+    : null;
+  $("cook-meta").textContent = [subNote, data.mock ? "guidance mode" : "AI-adjusted steps"]
+    .filter(Boolean)
+    .join(" · ");
+  $("cook-steps").innerHTML = (data.steps || [])
+    .map(
+      (s) =>
+        `<li><strong>Step ${s.step}.</strong> ${s.text}${
+          s.tip ? `<span class="step-tip">${s.tip}</span>` : ""
+        }</li>`
+    )
+    .join("");
 }
 
 async function openRecipe(id) {
   currentRecipeId = id;
-  $("results-panel").classList.add("hidden");
+  hideAllPanels();
   $("recipe-panel").classList.remove("hidden");
   $("recipe-title").textContent = "Loading…";
   $("recipe-steps").innerHTML = "";
@@ -435,28 +443,22 @@ async function openRecipe(id) {
     $("recipe-meta").textContent = [
       detail.ready_in_minutes ? `${detail.ready_in_minutes} min` : null,
       detail.servings ? `${detail.servings} servings` : null,
-      detail.mock ? "mock recipe" : null,
     ]
       .filter(Boolean)
       .join(" · ");
-    $("recipe-links").innerHTML = [
-      detail.source_url
-        ? `<a href="${detail.source_url}" target="_blank" rel="noopener">Original recipe</a>`
-        : "",
-      detail.video_url
-        ? `<a href="${detail.video_url}" target="_blank" rel="noopener">Watch video</a>`
-        : "",
-    ].join("");
-    await loadSimplifiedSteps();
+    $("recipe-links").innerHTML = detail.source_url
+      ? `<a href="${detail.source_url}" target="_blank" rel="noopener">Original recipe</a>`
+      : "";
+    await loadRecipeSteps();
   } catch (err) {
     $("recipe-title").textContent = "Could not load recipe";
     setStatus($("search-status"), err.message, true);
   }
 }
 
-async function loadSimplifiedSteps() {
+async function loadRecipeSteps() {
   if (!currentRecipeId) return;
-  const explain = stepMode === "beginner";
+  const explain = stepMode === "beginner" && $("explain-techniques").checked;
   const data = await api(`/recipes/${currentRecipeId}/simplify`, {
     method: "POST",
     body: JSON.stringify({
@@ -474,76 +476,26 @@ async function loadSimplifiedSteps() {
     .join("");
 }
 
-async function runSearch() {
-  const input = $("ingredient-input");
-  input.value = formatIngredientText(input.value);
-  const text = input.value.trim();
-  if (!text) {
-    setStatus($("search-status"), "Add at least one ingredient.", true);
-    return;
-  }
-  setStatus($("search-status"), "Searching…");
-  $("search-btn").disabled = true;
-  try {
-    await savePreferences();
-    let parsed;
-    try {
-      parsed = await api("/search/parse-ingredients", {
-        method: "POST",
-        body: JSON.stringify({ text }),
-      });
-    } catch (err) {
-      throw new Error(`Ingredient parse failed: ${err.message}`);
-    }
-    let data;
-    try {
-      data = await api("/search/recipes", {
-        method: "POST",
-        body: JSON.stringify({
-          ingredients: parsed.ingredients,
-          diets: selectedDiets(),
-          intolerances: selectedIntolerances(),
-          health_conditions: selectedHealthConditions(),
-          include_pantry_staples: $("include-pantry").checked,
-        }),
-      });
-    } catch (err) {
-      throw new Error(`Recipe search failed: ${err.message}`);
-    }
-    renderResults(data);
-    setStatus(
-      $("search-status"),
-      data.mock ? "Showing mock recipes (no API key used)." : "Results ready."
-    );
-  } catch (err) {
-    setStatus($("search-status"), err.message, true);
-  } finally {
-    $("search-btn").disabled = false;
-  }
-}
-
 async function enterSession(authData) {
   token = authData.access_token;
   localStorage.setItem("pf_token", token);
   isGuest = authData.is_guest;
   showApp(authData.email, authData.is_guest);
   try {
-    const prefs = await api("/preferences/me");
-    applyPreferences(prefs);
+    applyPreferences(await api("/preferences/me"));
   } catch {
-    /* defaults are fine */
+    /* defaults */
   }
 }
 
 async function bootstrap() {
   try {
     const health = await api("/healthz");
-    const tag = $("build-tag");
-    if (tag && health.version) tag.textContent = `Build ${health.version}`;
+    if ($("build-tag") && health.version) $("build-tag").textContent = `Build ${health.version}`;
     meta = await api("/search/meta");
-    renderDietOptions();
-    renderIntoleranceOptions();
-    renderHealthConditionOptions();
+    renderChipOptions("diet-options", meta.diets, "diet", "chip-diet");
+    renderChipOptions("intolerance-options", meta.intolerances, "intolerance", "chip-allergy");
+    renderChipOptions("health-condition-options", meta.health_conditions, "health-condition", "chip-medical");
     if (meta.mock_mode) $("mock-badge").classList.remove("hidden");
   } catch {
     setStatus($("auth-status"), "Could not reach API. Is the server running?", true);
@@ -555,8 +507,7 @@ async function bootstrap() {
     try {
       const me = await api("/auth/me");
       showApp(me.email, me.is_guest);
-      const prefs = await api("/preferences/me");
-      applyPreferences(prefs);
+      applyPreferences(await api("/preferences/me"));
       return;
     } catch {
       token = "";
@@ -566,27 +517,29 @@ async function bootstrap() {
   showLanding();
 }
 
-$("guest-btn").addEventListener("click", async () => {
+$("guest-btn")?.addEventListener("click", async () => {
   setStatus($("auth-status"), "Starting guest session…");
   try {
-    const data = await api("/auth/guest", { method: "POST" });
+    await enterSession(await api("/auth/guest", { method: "POST" }));
     setStatus($("auth-status"), "");
-    await enterSession(data);
   } catch (err) {
     setStatus($("auth-status"), err.message, true);
   }
 });
 
-$("auth-form").addEventListener("submit", async (e) => {
+$("auth-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const mode = document.querySelector(".auth-tabs button.active")?.dataset.authMode || "login";
   const fd = new FormData(e.target);
-  const body = { email: fd.get("email"), password: fd.get("password") };
   setStatus($("auth-status"), "…");
   try {
-    const data = await api(`/auth/${mode}`, { method: "POST", body: JSON.stringify(body) });
+    await enterSession(
+      await api(`/auth/${mode}`, {
+        method: "POST",
+        body: JSON.stringify({ email: fd.get("email"), password: fd.get("password") }),
+      })
+    );
     setStatus($("auth-status"), "");
-    await enterSession(data);
   } catch (err) {
     setStatus($("auth-status"), err.message, true);
   }
@@ -600,53 +553,72 @@ document.querySelectorAll(".auth-tabs button").forEach((btn) => {
   });
 });
 
-$("sign-out").addEventListener("click", () => {
+$("sign-out")?.addEventListener("click", () => {
   token = "";
   isGuest = false;
   localStorage.removeItem("pf_token");
-  $("ingredient-input").value = "";
-  $("results-panel").classList.add("hidden");
-  $("recipe-panel").classList.add("hidden");
+  $("sounds-good-input").value = "";
   showLanding();
 });
 
-$("search-btn").addEventListener("click", runSearch);
+$("search-btn")?.addEventListener("click", runSearch);
+$("inspired-btn")?.addEventListener("click", openInspiredPanel);
+$("suggest-subs-btn")?.addEventListener("click", suggestSubstitutions);
+$("start-cook-btn")?.addEventListener("click", startInspiredCook);
 
-const ingredientInput = $("ingredient-input");
-if (ingredientInput) {
-  ingredientInput.addEventListener("input", () => autoCommaOnInput(ingredientInput));
-  ingredientInput.addEventListener("blur", () => {
-    ingredientInput.value = formatIngredientText(ingredientInput.value);
-  });
-}
-
-$("back-to-results").addEventListener("click", () => {
-  $("recipe-panel").classList.add("hidden");
+$("back-to-results")?.addEventListener("click", () => {
+  $("inspired-panel").classList.add("hidden");
   $("results-panel").classList.remove("hidden");
 });
 
-$("mode-beginner").addEventListener("click", async () => {
-  stepMode = "beginner";
-  $("mode-beginner").classList.add("active");
-  $("mode-direct").classList.remove("active");
-  await loadSimplifiedSteps();
+$("back-to-inspired")?.addEventListener("click", () => {
+  $("cook-panel").classList.add("hidden");
+  $("inspired-panel").classList.remove("hidden");
 });
 
-$("mode-direct").addEventListener("click", async () => {
-  stepMode = "direct";
-  $("mode-direct").classList.add("active");
-  $("mode-beginner").classList.remove("active");
-  await loadSimplifiedSteps();
+$("back-from-recipe")?.addEventListener("click", () => {
+  $("recipe-panel").classList.add("hidden");
+  if (inspiredSetup) $("inspired-panel").classList.remove("hidden");
+  else $("results-panel").classList.remove("hidden");
+});
+
+function setStepMode(mode) {
+  stepMode = mode;
+  const beginner = mode === "beginner";
+  ["mode-beginner", "recipe-mode-beginner"].forEach((id) => $(id)?.classList.toggle("active", beginner));
+  ["mode-direct", "recipe-mode-direct"].forEach((id) => $(id)?.classList.toggle("active", !beginner));
+}
+
+$("mode-beginner")?.addEventListener("click", () => {
+  setStepMode("beginner");
+  startInspiredCook();
+});
+$("mode-direct")?.addEventListener("click", () => {
+  setStepMode("direct");
+  startInspiredCook();
+});
+$("recipe-mode-beginner")?.addEventListener("click", async () => {
+  setStepMode("beginner");
+  await loadRecipeSteps();
+});
+$("recipe-mode-direct")?.addEventListener("click", async () => {
+  setStepMode("direct");
+  await loadRecipeSteps();
 });
 
 document.addEventListener("change", (e) => {
-  const t = e.target;
   if (
-    t.matches(
-      "#diet-options input, #intolerance-options input, #health-condition-options input, #include-pantry, #explain-techniques"
+    e.target.matches(
+      "#diet-options input, #intolerance-options input, #health-condition-options input, #explain-techniques"
     )
   ) {
     schedulePrefsSave();
+  }
+  if (e.target.matches(".pantry-have")) {
+    $("substitutions-block").classList.add("hidden");
+    pendingSubstitutions = [];
+    approvedSubs = [];
+    $("start-cook-btn").disabled = false;
   }
 });
 

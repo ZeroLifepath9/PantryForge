@@ -643,6 +643,117 @@ def mock_recipe_detail(recipe_id: int) -> dict[str, Any] | None:
     return None
 
 
+SIDE_KEYWORDS = ("salad", "bruschetta", "greens", "dip", "beans", "stew", "rice", "bread")
+MAIN_PROTEINS = (
+    "chicken", "beef", "pork", "fish", "egg", "shrimp", "salmon", "turkey", "lamb", "sausage",
+)
+
+
+def _mock_recipe_category(recipe: dict[str, Any]) -> str:
+    title = recipe.get("title", "").lower()
+    required = " ".join(recipe.get("required", [])).lower()
+    if "salad" in title:
+        return "salad"
+    if "dip" in title or "bruschetta" in title:
+        return "dip"
+    if any(k in title for k in ("stew", "beans", "rice", "pasta", "spinach", "tomato pasta")):
+        if not any(p in title or p in required for p in MAIN_PROTEINS):
+            return "side"
+    if any(p in title or p in required for p in MAIN_PROTEINS):
+        return "main"
+    if any(k in title for k in SIDE_KEYWORDS):
+        return "side"
+    return "main"
+
+
+def _mock_card(recipe: dict[str, Any], category: str) -> dict[str, Any]:
+    return {
+        "id": recipe["id"],
+        "title": recipe["title"],
+        "category": category,
+        "image": recipe.get("image"),
+        "summary": recipe.get("summary"),
+        "ready_in_minutes": recipe.get("ready_in_minutes"),
+        "servings": recipe.get("servings"),
+        "source_url": recipe.get("source_url"),
+        "diets": recipe.get("diets", []),
+    }
+
+
+def mock_craving_search(
+    parsed: dict[str, Any],
+    *,
+    diets: list[str] | None = None,
+    intolerances: list[str] | None = None,
+    health_conditions: list[str] | None = None,
+) -> dict[str, Any]:
+    diets = diets or []
+    intolerances = intolerances or []
+    health_conditions = health_conditions or []
+    protein = (parsed.get("protein") or "").lower()
+    starches = [s.lower() for s in parsed.get("starches") or []]
+    terms = set(parsed.get("search_terms") or [])
+
+    candidates: list[tuple[str, dict[str, Any], int]] = []
+    for recipe in MOCK_RECIPES:
+        if not _recipe_matches_diets(recipe, diets):
+            continue
+        if not _recipe_matches_intolerances(recipe, intolerances):
+            continue
+        if not _recipe_matches_health_conditions(recipe, health_conditions):
+            continue
+        category = _mock_recipe_category(recipe)
+        title = recipe["title"].lower()
+        required = " ".join(recipe.get("required", [])).lower()
+        score = 0
+        if protein and (protein in title or protein in required):
+            score += 10
+        for s in starches:
+            if s.rstrip("s") in title or s.rstrip("s") in required:
+                score += 4
+        for t in terms:
+            if t in title or t in required:
+                score += 2
+        if category == "main" and protein:
+            score += 3
+        candidates.append((category, recipe, score))
+
+    mains_pool = [(r, s) for c, r, s in candidates if c == "main"]
+    mains_pool.sort(key=lambda x: x[1], reverse=True)
+    mains = [_mock_card(r, "main") for r, _ in mains_pool[:5]]
+
+    if len(mains) < 5:
+        extra = [(r, s) for c, r, s in candidates if c == "main"]
+        extra.sort(key=lambda x: x[1], reverse=True)
+        seen = {m["id"] for m in mains}
+        for r, _ in extra:
+            if r["id"] not in seen:
+                mains.append(_mock_card(r, "main"))
+                seen.add(r["id"])
+            if len(mains) >= 5:
+                break
+
+    pair_pool = [(r, s) for c, r, s in candidates if c in ("side", "salad", "dip")]
+    pair_pool.sort(key=lambda x: x[1], reverse=True)
+    pairings: list[dict[str, Any]] = []
+    seen_ids = {m["id"] for m in mains}
+    for r, _ in pair_pool:
+        if r["id"] in seen_ids:
+            continue
+        pairings.append(_mock_card(r, _mock_recipe_category(r)))
+        seen_ids.add(r["id"])
+        if len(pairings) >= 20:
+            break
+
+    message = None
+    if not mains:
+        message = "No main courses matched your craving — try naming a protein or starch."
+    elif pairings:
+        message = f"Found {len(mains)} mains and {len(pairings)} sides, salads, and dips."
+
+    return {"mains": mains, "pairings": pairings, "message": message}
+
+
 def mock_simplify_steps(
     recipe_id: int,
     *,
