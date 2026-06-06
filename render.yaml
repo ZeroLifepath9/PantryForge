@@ -1,0 +1,26 @@
+# Render Blueprint — Pantry Forge
+# Connect this repo in Render Dashboard or apply as a Blueprint.
+
+services:
+  - type: web
+    name: pantry-forge
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    healthCheckPath: /healthz
+    envVars:
+      - key: ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.11"
+      - key: USE_MOCK_DATA
+        value: "true"
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./pantry_forge.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SPOONACULAR_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false

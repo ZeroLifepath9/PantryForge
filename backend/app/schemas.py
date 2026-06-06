@@ -1,0 +1,139 @@
+from typing import Any, Literal
+
+from pydantic import BaseModel, EmailStr, Field
+
+MatchTier = Literal["exact", "almost", "stretch"]
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+    is_guest: bool = False
+
+
+class UserResponse(BaseModel):
+    user_id: str
+    email: str
+    is_guest: bool = False
+
+
+class PreferencesResponse(BaseModel):
+    diets: list[str] = []
+    intolerances: list[str] = []
+    skill_level: str = "beginner"
+    explain_techniques: bool = True
+    include_pantry_staples: bool = True
+    pantry_staples: list[str] = []
+
+
+class PreferencesUpdate(BaseModel):
+    diets: list[str] | None = None
+    intolerances: list[str] | None = None
+    skill_level: str | None = None
+    explain_techniques: bool | None = None
+    include_pantry_staples: bool | None = None
+    pantry_staples: list[str] | None = None
+
+
+class ParseIngredientsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ParseIngredientsResponse(BaseModel):
+    ingredients: list[str]
+    mock: bool = False
+
+
+class SearchRecipesRequest(BaseModel):
+    ingredients: list[str] = Field(min_length=1)
+    diets: list[str] = []
+    intolerances: list[str] = []
+    include_pantry_staples: bool = True
+    pantry_staples: list[str] = []
+
+
+class IngredientMatch(BaseModel):
+    name: str
+    amount: str | None = None
+
+
+class RecipeSearchResult(BaseModel):
+    id: int
+    title: str
+    image: str | None = None
+    match_tier: MatchTier
+    match_label: str
+    used_ingredients: list[IngredientMatch]
+    missed_ingredients: list[IngredientMatch]
+    unused_ingredients: list[IngredientMatch]
+    diets: list[str] = []
+    ready_in_minutes: int | None = None
+    servings: int | None = None
+    source_url: str | None = None
+    video_url: str | None = None
+    summary: str | None = None
+
+
+class SearchRecipesResponse(BaseModel):
+    query_ingredients: list[str]
+    effective_ingredients: list[str]
+    results: list[RecipeSearchResult]
+    mock: bool = False
+    message: str | None = None
+
+
+class RecipeDetailResponse(BaseModel):
+    id: int
+    title: str
+    image: str | None = None
+    summary: str | None = None
+    ready_in_minutes: int | None = None
+    servings: int | None = None
+    source_url: str | None = None
+    video_url: str | None = None
+    ingredients: list[IngredientMatch]
+    instructions: list[str]
+    diets: list[str] = []
+    mock: bool = False
+
+
+class SimplifyRecipeRequest(BaseModel):
+    explain_techniques: bool | None = None
+    skill_level: str | None = None
+
+
+class SimplifiedStep(BaseModel):
+    step: int
+    text: str
+    tip: str | None = None
+
+
+class SimplifyRecipeResponse(BaseModel):
+    recipe_id: int
+    title: str
+    mode: str
+    steps: list[SimplifiedStep]
+    mock: bool = False
+
+
+class DietOption(BaseModel):
+    value: str
+    label: str
+
+
+class MetaResponse(BaseModel):
+    mock_mode: bool
+    diets: list[DietOption]
+    intolerances: list[DietOption]

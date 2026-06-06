@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pantry Forge — What can I make?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div>
+        <p class="eyebrow">Cook with what you have</p>
+        <h1>Pantry Forge</h1>
+        <p class="tagline">Tell us what's in your kitchen. We'll show what you can make — and teach you how.</p>
+      </div>
+      <div class="header-actions">
+        <span id="mock-badge" class="badge badge-mock hidden">Mock data</span>
+        <span id="session-badge" class="badge badge-guest hidden"></span>
+        <p id="auth-user" class="auth-user hidden"></p>
+        <button type="button" id="sign-out" class="btn-ghost hidden">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section id="landing-panel" class="landing-panel">
+      <div class="landing-card">
+        <h2>What's in your kitchen?</h2>
+        <p class="hint">Start as a guest to try it now, or create an account so we can remember your tastes.</p>
+
+        <button type="button" id="guest-btn" class="btn-primary btn-wide btn-guest">Continue as guest</button>
+
+        <div class="landing-divider"><span>or use an account</span></div>
+
+        <div class="auth-tabs" role="tablist">
+          <button type="button" class="active" data-auth-mode="login" id="auth-tab-login">Sign in</button>
+          <button type="button" data-auth-mode="register" id="auth-tab-register">Create account</button>
+        </div>
+        <form id="auth-form" novalidate>
+          <label>Email <input name="email" type="email" required autocomplete="email" /></label>
+          <label>Password <input name="password" type="password" required minlength="8" autocomplete="current-password" /></label>
+          <button type="submit" class="btn-secondary btn-wide" id="auth-submit">Sign in</button>
+        </form>
+        <p id="auth-status" class="status" role="status"></p>
+        <p class="landing-note">Guest sessions save on this device. Create an account later to keep preferences everywhere.</p>
+      </div>
+    </section>
+
+    <section id="search-panel" class="panel panel-main hidden">
+      <h2>What's in your kitchen?</h2>
+      <label class="field-grow">
+        Ingredients
+        <textarea id="ingredient-input" rows="3" placeholder="e.g. 2 eggs, tomato, basil, old cheddar"></textarea>
+      </label>
+
+      <fieldset class="filter-fieldset filter-diets">
+        <legend>Lifestyle diets</legend>
+        <p class="fieldset-hint">Optional — choose how you like to eat day to day.</p>
+        <div id="diet-options" class="chip-grid"></div>
+      </fieldset>
+
+      <fieldset class="filter-fieldset filter-health">
+        <legend>Health restrictions</legend>
+        <p class="fieldset-hint">Allergies and intolerances — we'll avoid recipes that conflict.</p>
+        <div id="intolerance-options" class="chip-grid"></div>
+      </fieldset>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="include-pantry" checked />
+          <span>Include pantry basics (pasta, oil, cheese, salt…)</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="explain-techniques" checked />
+          <span>Explain cooking basics in steps</span>
+        </label>
+      </div>
+
+      <button type="button" id="search-btn" class="btn-primary btn-wide">Find recipes</button>
+      <p id="search-status" class="status" role="status"></p>
+    </section>
+
+    <section id="results-panel" class="panel hidden">
+      <div class="results-header">
+        <h2>Your options</h2>
+        <p id="results-message" class="hint"></p>
+      </div>
+      <div id="parsed-ingredients" class="parsed-chips hidden"></div>
+      <div id="results-list" class="results-list"></div>
+    </section>
+
+    <section id="recipe-panel" class="panel hidden">
+      <button type="button" id="back-to-results" class="btn-ghost">← Back to results</button>
+      <h2 id="recipe-title"></h2>
+      <p id="recipe-meta" class="hint"></p>
+      <div id="recipe-links" class="link-row"></div>
+      <div class="step-mode-row">
+        <button type="button" id="mode-beginner" class="btn-chip active">I'm learning</button>
+        <button type="button" id="mode-direct" class="btn-chip">Keep it direct</button>
+      </div>
+      <ol id="recipe-steps" class="recipe-steps"></ol>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p id="footer-note">Pantry Forge · mock recipes until Spoonacular key is added</p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

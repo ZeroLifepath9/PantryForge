@@ -1,0 +1,13 @@
+JWT_SECRET
+XAI_API_KEY
+SPOONACULAR_API_KEY
+backend/.venv/
+.venv/
+backend/pantry_forge.db
+pantry_forge.db
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+.env
+*.pyc
+.DS_Store
