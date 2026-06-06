@@ -386,6 +386,17 @@ def _map_complex_card(info: dict[str, Any], *, category: str) -> dict[str, Any]:
         if key == "pescatarian":
             key = "pescetarian"
         diets.append(key)
+
+    ingredient_names: list[str] = []
+    for ing in info.get("extendedIngredients") or []:
+        name = ing.get("name") or ing.get("originalName") or ""
+        if name:
+            ingredient_names.append(name.lower())
+
+    likes = info.get("aggregateLikes")
+    score = info.get("spoonacularScore")
+    popularity = float(likes or score or 0)
+
     return {
         "id": info["id"],
         "title": info.get("title") or "Recipe",
@@ -396,6 +407,11 @@ def _map_complex_card(info: dict[str, Any], *, category: str) -> dict[str, Any]:
         "servings": info.get("servings"),
         "source_url": info.get("sourceUrl"),
         "diets": diets,
+        "ingredient_names": ingredient_names,
+        "aggregate_likes": likes,
+        "spoonacular_score": score,
+        "popularity": popularity,
+        "used_ingredient_count": info.get("usedIngredientCount"),
     }
 
 
@@ -406,12 +422,16 @@ async def complex_search(
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
     dish_type: str | None = None,
+    sort: str | None = None,
+    sort_direction: str | None = None,
+    include_ingredients: str | None = None,
+    fill_ingredients: bool = False,
 ) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "query": query,
         "number": number,
         "addRecipeInformation": True,
-        "fillIngredients": False,
+        "fillIngredients": fill_ingredients,
         "instructionsRequired": True,
     }
     diet_param = _spoon_diet_param(diets or [])
@@ -421,6 +441,12 @@ async def complex_search(
         params["intolerances"] = ",".join(intolerances)
     if dish_type:
         params["type"] = dish_type
+    if sort:
+        params["sort"] = sort
+    if sort_direction:
+        params["sortDirection"] = sort_direction
+    if include_ingredients:
+        params["includeIngredients"] = include_ingredients
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         data = await _request(client, "/recipes/complexSearch", params=params)
@@ -439,217 +465,15 @@ async def complex_search(
     return results
 
 
-def _mentions_protein(card: dict[str, Any], protein: str) -> bool:
-    blob = _normalize(f"{card.get('title') or ''} {card.get('summary') or ''}")
-    return protein in blob
-
-
-def _is_vegetarian_card(card: dict[str, Any]) -> bool:
-    diets = {d.lower() for d in (card.get("diets") or [])}
-    return "vegetarian" in diets or "vegan" in diets
-
-
-def _dish_family_label(anchor: str | None) -> str:
-    labels = {
-        "taco": "taco-style",
-        "pasta": "pasta",
-        "pizza": "pizza",
-        "burger": "burger",
-        "curry": "curry",
-        "stir_fry": "stir-fry",
-        "soup": "soup",
-        "salad": "salad",
-    }
-    return labels.get(anchor or "", "dish")
-
-
-async def _search_dish_family(
-    parsed: dict[str, Any],
-    *,
-    diets: list[str],
-    intolerances: list[str],
-) -> dict[str, Any]:
-    from app.services.dish_families import detect_dish_anchor, matches_dish_family
-
-    dish_anchor = parsed.get("dish_anchor")
-    dish_queries = list(parsed.get("dish_queries") or [])
-    if dish_anchor and not dish_queries:
-        _, dish_queries = detect_dish_anchor(parsed.get("main_query") or "")
-    if not dish_queries and dish_anchor:
-        dish_queries = [dish_anchor.replace("_", " ")]
-
-    protein = (parsed.get("protein") or "").strip().lower()
-    vegetarian_only = bool(parsed.get("vegetarian_filter"))
-    cuisine = parsed.get("cuisine")
-    family_label = _dish_family_label(dish_anchor)
-
-    per_query = max(3, 14 // max(len(dish_queries), 1))
-    mains: list[dict[str, Any]] = []
-    pairings: list[dict[str, Any]] = []
-    seen: set[int] = set()
-
-    for dq in dish_queries:
-        query = f"{protein} {dq}".strip() if protein else dq
-        batch = await complex_search(
-            query=query,
-            number=per_query,
-            diets=diets,
-            intolerances=intolerances,
-            dish_type="main course",
-        )
-        for card in batch:
-            if card["id"] in seen:
-                continue
-            if dish_anchor and not matches_dish_family(card, dish_anchor):
-                continue
-            if protein and not _mentions_protein(card, protein):
-                continue
-            if vegetarian_only and not _is_vegetarian_card(card):
-                continue
-            card = dict(card)
-            card["category"] = "main"
-            seen.add(card["id"])
-            mains.append(card)
-
-    if cuisine and len(pairings) < 8:
-        side_query = f"{cuisine} side dish"
-        if protein:
-            side_query = f"{protein} {side_query}"
-        side_batch = await complex_search(
-            query=side_query,
-            number=6,
-            diets=diets,
-            intolerances=intolerances,
-        )
-        for card in side_batch:
-            if card["id"] in seen:
-                continue
-            if protein and not _mentions_protein(card, protein):
-                continue
-            if vegetarian_only and not _is_vegetarian_card(card):
-                continue
-            cat = card.get("category") or "side"
-            if cat not in ("side", "salad", "dip"):
-                cat = "side"
-            card = dict(card)
-            card["category"] = cat
-            seen.add(card["id"])
-            pairings.append(card)
-
-    adjacent = ", ".join(dish_queries[:4])
-    message = None
-    total = len(mains) + len(pairings)
-    if total:
-        if protein:
-            message = (
-                f"{family_label.title()} dishes with {protein} — "
-                f"including {adjacent} and more."
-            )
-        else:
-            message = (
-                f"{family_label.title()} recipes — tacos, burritos, fajitas & adjacents. "
-                "Pick a protein below to narrow these down."
-                if dish_anchor == "taco"
-                else f"{family_label.title()} recipes ({adjacent}). Pick a protein to narrow down."
-            )
-    else:
-        if protein:
-            message = f"No {family_label} recipes found for {protein}. Try another protein or loosen filters."
-        else:
-            message = f"No {family_label} recipes found. Try loosening diet filters."
-
-    return {
-        "mains": mains[:12],
-        "pairings": pairings[:12],
-        "message": message,
-        "search_mode": "dish",
-    }
-
-
 async def search_by_craving(
     parsed: dict[str, Any],
     *,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
 ) -> dict[str, Any]:
+    from app.services.craving_fetch import fetch_live_candidates
+
     diets = diets or []
     intolerances = intolerances or []
-    search_mode = (parsed.get("search_mode") or "general").lower()
-
-    if search_mode == "dish" and parsed.get("dish_anchor"):
-        result = await _search_dish_family(parsed, diets=diets, intolerances=intolerances)
-        result["protein_search"] = parsed.get("protein") or parsed.get("dish_anchor")
-        return result
-
-    protein = (parsed.get("protein") or "").strip().lower()
-    search_anchor = protein or (parsed.get("protein_query") or parsed.get("main_query") or "dinner")
-
-    search_plan: list[tuple[str, str | None, str, int]] = []
-    if search_mode == "protein" or protein:
-        search_plan = [
-            (protein or search_anchor, "main course", "main", 10),
-            (protein or search_anchor, None, "side", 8),
-            (protein or search_anchor, None, "salad", 8),
-            (protein or search_anchor, None, "dip", 6),
-        ]
-    else:
-        search_plan = [
-            (search_anchor, "main course", "main", 10),
-            (search_anchor, None, "side", 6),
-            (search_anchor, None, "salad", 6),
-        ]
-
-    mains: list[dict[str, Any]] = []
-    pairings: list[dict[str, Any]] = []
-    seen: set[int] = set()
-
-    for query, dish_type, target_cat, number in search_plan:
-        batch = await complex_search(
-            query=query,
-            number=number,
-            diets=diets,
-            intolerances=intolerances,
-            dish_type=dish_type,
-        )
-        for card in batch:
-            if card["id"] in seen:
-                continue
-            if protein and not _mentions_protein(card, protein):
-                continue
-
-            cat = card.get("category") or target_cat
-            if target_cat == "main":
-                cat = "main"
-            elif target_cat in ("side", "salad", "dip"):
-                cat = target_cat if cat in ("side", "salad", "dip") else target_cat
-            else:
-                cat = target_cat
-
-            card = dict(card)
-            card["category"] = cat
-            seen.add(card["id"])
-
-            if cat == "main" and len(mains) < 8:
-                mains.append(card)
-            elif cat != "main" and len(pairings) < 20:
-                pairings.append(card)
-
-    message = None
-    if protein:
-        total = len(mains) + len(pairings)
-        if total:
-            message = (
-                f"Dishes featuring {protein} — mains, sides, and more to scratch that craving."
-            )
-        else:
-            message = f"No recipes found for {protein}. Try another protein or loosen diet filters."
-    elif not mains and not pairings:
-        message = "No matches — try naming a dish (tacos, pasta) or a protein (chicken, salmon)."
-
-    return {
-        "mains": mains[:8],
-        "pairings": pairings[:20],
-        "message": message,
-        "protein_search": protein or search_anchor,
-        "search_mode": search_mode,
-    }
+    candidates = await fetch_live_candidates(parsed, diets=diets, intolerances=intolerances)
+    return {"candidates": candidates}

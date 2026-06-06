@@ -442,6 +442,18 @@ textarea { resize: vertical; min-height: 5rem; }
   color: #fff;
 }
 
+.meal-card-popular {
+  margin-left: 0.35rem;
+  background: var(--amber-soft);
+  color: var(--amber);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .results-scroll {
   max-height: min(70vh, 42rem);
   overflow-y: auto;

@@ -173,6 +173,9 @@ function renderMealCard(recipe) {
   const checked = selectedIds.has(recipe.id);
   const cat = recipe.category || "main";
   const catClass = `meal-card-${cat}`;
+  const popularBadge = recipe.is_popular
+    ? `<span class="meal-card-popular">Popular</span>`
+    : "";
   const img = recipe.image
     ? `<img class="result-thumb" src="${escapeHtml(recipe.image)}" alt="" loading="lazy" />`
     : `<div class="result-thumb result-thumb-placeholder" aria-hidden="true"></div>`;
@@ -182,7 +185,7 @@ function renderMealCard(recipe) {
       <div class="meal-card-inner">
         ${img}
         <div class="meal-card-body">
-          <span class="meal-card-cat">${categoryLabel(cat)}</span>
+          <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}</span>
           <strong class="result-title">${escapeHtml(recipe.title)}</strong>
           ${recipe.fit_note ? `<p class="meal-card-fit">${escapeHtml(recipe.fit_note)}</p>` : ""}
           ${recipe.summary ? `<p class="meal-card-summary">${escapeHtml(recipe.summary)}</p>` : ""}
@@ -267,19 +270,14 @@ function renderProteinPrompt(parsed) {
   const options = $("protein-options");
   if (!block || !options) return;
 
-  const show =
-    parsed?.search_mode === "dish" &&
-    parsed?.dish_anchor &&
-    (parsed.protein_options?.length || parsed.needs_protein_prompt);
-
-  if (!show) {
+  const choices = parsed?.protein_options || [];
+  if (!choices.length) {
     block.classList.add("hidden");
     options.innerHTML = "";
     return;
   }
 
   block.classList.remove("hidden");
-  const choices = parsed.protein_options || [];
   const active = proteinFilterExplicit
     ? (selectedProteinFilter || "")
     : (parsed.protein || "");
@@ -312,11 +310,15 @@ function renderCravingResults(data) {
   const recipes = normalizeRecipes(data);
   const total = recipes.length;
   const parsed = data.parsed || {};
+  const pageSize = data.page_size || 25;
+  const popularTop = data.popular_top || 5;
   const dishTitle =
     parsed.search_mode === "dish" && parsed.dish_anchor
       ? dishFamilyLabel(parsed.dish_anchor)
       : "Recipes for you";
-  $("results-heading").textContent = total ? `${dishTitle} (${total})` : dishTitle;
+  $("results-heading").textContent = total
+    ? `${dishTitle} (${total} of ${pageSize})`
+    : dishTitle;
   $("results-message").textContent = data.message || (total
     ? `${total} recipe${total === 1 ? "" : "s"} to inspire your own creation.`
     : "No matches yet.");

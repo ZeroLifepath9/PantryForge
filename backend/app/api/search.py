@@ -57,6 +57,8 @@ async def search_craving_endpoint(body: CravingSearchRequest):
         what_sounds_good=payload["what_sounds_good"],
         parsed=CravingParsed(**payload["parsed"]),
         recipes=[MealRecipeCard(**m) for m in payload["recipes"]],
+        page_size=payload.get("page_size", 25),
+        popular_top=payload.get("popular_top", 5),
         mock=is_mock,
         live=bool(payload.get("live")),
         message=payload.get("message"),

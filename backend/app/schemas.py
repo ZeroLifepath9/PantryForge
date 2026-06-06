@@ -195,6 +195,7 @@ class CravingParsed(BaseModel):
     dish_queries: list[str] = []
     protein: str | None = None
     protein_query: str | None = None
+    ingredients: list[str] = []
     starches: list[str] = []
     flavors: list[str] = []
     cuisine: str | None = None
@@ -213,6 +214,7 @@ class MealRecipeCard(BaseModel):
     image: str | None = None
     summary: str | None = None
     fit_note: str | None = None
+    is_popular: bool = False
     ready_in_minutes: int | None = None
     servings: int | None = None
     source_url: str | None = None
@@ -231,6 +233,8 @@ class CravingSearchResponse(BaseModel):
     what_sounds_good: str
     parsed: CravingParsed
     recipes: list[MealRecipeCard] = []
+    page_size: int = 25
+    popular_top: int = 5
     mock: bool = False
     live: bool = False
     message: str | None = None

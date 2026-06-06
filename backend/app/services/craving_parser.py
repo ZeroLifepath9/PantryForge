@@ -18,11 +18,12 @@ PARSER_SYSTEM = """You parse what a home cook says sounds good for recipe search
 
 Output ONLY valid JSON:
 {
-  "search_mode": "dish|protein|general",
+  "search_mode": "dish|protein|ingredient|general",
   "dish_anchor": "taco|pasta|pizza|burger|curry|stir_fry|soup|salad|null",
   "dish_queries": ["taco", "burrito", "fajita", ...],
   "protein": "chicken|beef|...|null",
   "protein_query": "protein word only or null",
+  "ingredients": ["lime", "garlic", "cilantro", ...],
   "starches": [],
   "flavors": [],
   "cuisine": "mexican|italian|null",
@@ -31,16 +32,14 @@ Output ONLY valid JSON:
   "search_terms": []
 }
 
-RULES (priority order):
-1. DISH MODE: If they name a dish (tacos, pasta, pizza, burgers, curry, stir fry, soup, salad),
-   set search_mode=dish, dish_anchor, and dish_queries INCLUDING adjacents:
-   - tacos → taco, burrito, fajita, quesadilla, enchilada
-   - pasta → pasta, spaghetti, lasagna, ravioli
-   - pizza → pizza, calzone
-2. PROTEIN MODE: If they name a protein WITHOUT a dish anchor, search_mode=protein.
-3. GENERAL: Otherwise search_mode=general with main_query from craving.
-4. protein_query is ONLY the protein word — never combine with dish names.
-5. If dish mode and no protein mentioned, protein=null (UI will ask).
+RULES:
+1. DISH: tacos/pasta/pizza etc → search_mode=dish, dish_anchor, dish_queries WITH adjacents
+   (tacos → taco, burrito, fajita, quesadilla, enchilada).
+2. Extract every food ingredient mentioned (lime, tomato, garlic, rice…) into ingredients[].
+   Do NOT put proteins or dish names in ingredients.
+3. protein = explicit protein only; null if not stated (UI will offer a protein filter).
+4. protein+ingredients without a dish → search_mode=protein or ingredient.
+5. main_query = short summary of the craving.
 """
 
 PROTEINS = (
@@ -51,6 +50,12 @@ STARCHES = (
     "noodles", "pasta", "spaghetti", "potato", "potatoes", "rice", "bread",
     "tortilla", "quinoa", "couscous", "macaroni",
 )
+INGREDIENT_HINTS = (
+    "lime", "lemon", "garlic", "onion", "tomato", "cilantro", "basil", "cheese",
+    "rice", "beans", "avocado", "pepper", "mushroom", "spinach", "broccoli",
+    "corn", "potato", "cream", "butter", "honey", "ginger", "cumin", "chili",
+)
+
 MOODS = {
     "light": ("light", "fresh", "healthy", "simple"),
     "comfort": ("comfort", "cozy", "hearty", "warm"),
@@ -93,6 +98,7 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         dish_anchor = str(dish_anchor).lower().strip()
 
     dish_queries = [str(q).strip() for q in (raw.get("dish_queries") or []) if q]
+    ingredients = [str(i).lower().strip() for i in (raw.get("ingredients") or []) if i]
 
     starches = [str(s).lower().strip() for s in (raw.get("starches") or []) if s]
     flavors = [str(f).lower().strip() for f in (raw.get("flavors") or []) if f]
@@ -121,6 +127,7 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         "dish_queries": dish_queries,
         "protein": protein,
         "protein_query": protein_query,
+        "ingredients": ingredients,
         "starches": starches,
         "flavors": flavors,
         "cuisine": cuisine,
@@ -142,8 +149,12 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
     else:
         result["search_mode"] = search_mode if search_mode in ("protein", "dish", "general") else "general"
 
-    if result["search_mode"] == "dish" and not result["protein"]:
+    if not result["protein"]:
         result["needs_protein_prompt"] = True
+
+    for ing in result["ingredients"]:
+        if ing not in result["search_terms"]:
+            result["search_terms"].append(ing)
 
     if protein and protein not in result["search_terms"]:
         result["search_terms"].insert(0, protein)
@@ -170,12 +181,26 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
             break
 
     dish_anchor, dish_queries = detect_dish_anchor(text)
-    search_mode = "dish" if dish_anchor else ("protein" if protein else "general")
+    ingredients = [
+        i for i in INGREDIENT_HINTS
+        if re.search(rf"\b{re.escape(i)}\b", lower)
+    ]
+    ingredients += [f for f in flavors if f not in ingredients]
+    ingredients = list(dict.fromkeys(ingredients))
+
+    if dish_anchor:
+        search_mode = "dish"
+    elif protein and ingredients:
+        search_mode = "ingredient"
+    elif protein:
+        search_mode = "protein"
+    else:
+        search_mode = "general"
 
     search_terms = list(dict.fromkeys(
         ([protein] if protein else [])
+        + ingredients
         + starches
-        + flavors
         + dish_queries[:3]
         + [w for w in re.findall(r"[a-z]{3,}", lower) if w not in ("something", "with", "and", "the", "want")]
     ))[:12]
@@ -186,6 +211,7 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
         "dish_queries": dish_queries,
         "protein": protein,
         "protein_query": protein,
+        "ingredients": ingredients,
         "starches": starches,
         "flavors": flavors,
         "cuisine": cuisine,
@@ -193,7 +219,7 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
         "main_query": dish_queries[0] if dish_queries else (protein or text.strip()[:60]),
         "pairing_queries": [],
         "search_terms": search_terms,
-        "needs_protein_prompt": bool(dish_anchor and not protein),
+        "needs_protein_prompt": not protein,
         "protein_options": PROTEIN_OPTIONS,
     }
     return result
@@ -223,8 +249,7 @@ def apply_protein_filter(parsed: dict[str, Any], protein_filter: str | None) -> 
         out["protein"] = None
         out["protein_query"] = None
         out["vegetarian_filter"] = False
-        if out.get("search_mode") == "dish" and out.get("dish_anchor"):
-            out["needs_protein_prompt"] = True
+        out["needs_protein_prompt"] = True
         return out
     p = protein_filter.strip().lower()
     if p == "vegetarian":

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-dish" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-craving" />
 </head>
 <body>
   <header class="site-header">
@@ -48,7 +48,7 @@
 
     <section id="search-panel" class="panel panel-main hidden">
       <h2>What sounds good?</h2>
-      <p class="hint">Name a dish (tacos, pasta) or a protein (chicken, salmon). We'll find the dish plus adjacents — like burritos and fajitas for tacos.</p>
+      <p class="hint">Describe what sounds good — a dish (tacos), a protein with ingredients (chicken, garlic, lemon), or both. Top 5 results are the most popular.</p>
       <label class="field-grow">
         What sounds good?
         <textarea id="sounds-good-input" rows="3" maxlength="500" placeholder="e.g. I want tacos · chicken pasta · salmon with something light"></textarea>
@@ -85,7 +85,7 @@
       </div>
       <div id="parsed-craving" class="parsed-chips hidden"></div>
       <div id="protein-prompt" class="protein-prompt hidden">
-        <p class="protein-prompt-label">Pick a protein to narrow these down <span class="hint-inline">(optional)</span></p>
+        <p class="protein-prompt-label">Filter by protein to refresh results <span class="hint-inline">(optional)</span></p>
         <div id="protein-options" class="protein-options"></div>
       </div>
 
@@ -143,6 +143,6 @@
     <p id="build-tag" class="build-tag" aria-hidden="true"></p>
   </footer>
 
-  <script src="/static/app.js?v=20250606-dish"></script>
+  <script src="/static/app.js?v=20250606-craving"></script>
 </body>
 </html>

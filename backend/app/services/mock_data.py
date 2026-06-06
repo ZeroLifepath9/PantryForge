@@ -756,7 +756,17 @@ def _mock_recipe_category(recipe: dict[str, Any]) -> str:
     return "main"
 
 
+def _mock_popularity(recipe: dict[str, Any]) -> float:
+    if "popularity" in recipe:
+        return float(recipe["popularity"])
+    title = (recipe.get("title") or "").lower()
+    if any(k in title for k in ("taco", "burrito", "fajita", "quesadilla")):
+        return 800.0 + (recipe["id"] % 50)
+    return 120.0 + (recipe["id"] % 80)
+
+
 def _mock_card(recipe: dict[str, Any], category: str) -> dict[str, Any]:
+    required = [r.lower() for r in recipe.get("required") or []]
     return {
         "id": recipe["id"],
         "title": recipe["title"],
@@ -767,6 +777,9 @@ def _mock_card(recipe: dict[str, Any], category: str) -> dict[str, Any]:
         "servings": recipe.get("servings"),
         "source_url": recipe.get("source_url"),
         "diets": recipe.get("diets", []),
+        "ingredient_names": required,
+        "popularity": _mock_popularity(recipe),
+        "aggregate_likes": int(_mock_popularity(recipe)),
     }
 
 
@@ -803,15 +816,12 @@ def _score_mock_recipe(
         if w not in _STOPWORDS
     ]
 
-    card = {"title": recipe.get("title"), "summary": recipe.get("summary")}
-    if search_mode == "dish" and dish_anchor and category == "main":
-        if not matches_dish_family(card, dish_anchor):
-            return -1
-        if protein and protein not in blob:
-            return -1
-    elif protein and category == "main":
-        if protein not in blob:
-            return -1
+    ingredients = [i.lower() for i in (parsed.get("ingredients") or [])]
+    card = {
+        "title": recipe.get("title"),
+        "summary": recipe.get("summary"),
+        "ingredient_names": [r.lower() for r in recipe.get("required") or []],
+    }
 
     score = 0
     if search_mode == "dish" and dish_anchor:
@@ -822,6 +832,9 @@ def _score_mock_recipe(
                 score += 8
     if protein and protein in blob:
         score += 20
+    for ing in ingredients:
+        if ing in blob:
+            score += 10
     for s in starches:
         stem = s.rstrip("s")
         if stem in blob:
@@ -839,24 +852,25 @@ def _score_mock_recipe(
     if mood == "comfort" and any(w in blob for w in ("pasta", "cheese", "stew", "creamy", "rice")):
         score += 3
 
-    if category == "main" and score == 0 and (protein or starches or query_words or dish_anchor):
+    if score == 0 and not dish_anchor and not (protein or ingredients):
         return -1
     return score
 
 
-def mock_craving_search(
+def mock_craving_candidates(
     parsed: dict[str, Any],
     *,
     what_sounds_good: str = "",
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
     health_conditions: list[str] | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
+    """Return a broad candidate pool for the ranker (dish + protein/ingredient matches)."""
     diets = diets or []
     intolerances = intolerances or []
     health_conditions = health_conditions or []
 
-    candidates: list[tuple[str, dict[str, Any], int]] = []
+    scored: list[tuple[dict[str, Any], int]] = []
     for recipe in MOCK_RECIPES:
         if not _recipe_matches_diets(recipe, diets):
             continue
@@ -873,46 +887,31 @@ def mock_craving_search(
         )
         if score < 0:
             continue
-        if score == 0 and (parsed.get("protein") or parsed.get("starches") or what_sounds_good.strip()):
+        if score == 0 and not parsed.get("dish_anchor"):
             continue
-        candidates.append((category, recipe, score))
+        scored.append((_mock_card(recipe, category), score))
 
-    mains_pool = [(r, s) for c, r, s in candidates if c == "main" and s > 0]
-    mains_pool.sort(key=lambda x: x[1], reverse=True)
-    mains = [_mock_card(r, "main") for r, _ in mains_pool[:5]]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [card for card, _ in scored[:60]]
 
-    protein = (parsed.get("protein") or "").lower()
-    pair_pool = [(r, s) for c, r, s in candidates if c in ("side", "salad", "dip") and s > 0]
-    if protein:
-        # Prefer sides that also mention the protein when available
-        pair_pool.sort(
-            key=lambda x: (
-                1 if protein in _craving_blob(x[0]) else 0,
-                x[1],
-            ),
-            reverse=True,
-        )
-    else:
-        pair_pool.sort(key=lambda x: x[1], reverse=True)
-    pairings: list[dict[str, Any]] = []
-    seen_ids = {m["id"] for m in mains}
-    for r, _ in pair_pool:
-        if r["id"] in seen_ids:
-            continue
-        pairings.append(_mock_card(r, _mock_recipe_category(r)))
-        seen_ids.add(r["id"])
-        if len(pairings) >= 20:
-            break
 
-    message = None
-    if not mains and not pairings:
-        anchor = parsed.get("dish_anchor")
-        if anchor:
-            message = f"No demo {anchor.replace('_', ' ')} recipes matched — add API keys for live search."
-        else:
-            message = "No demo recipes matched that craving — try tacos, chicken, pasta, or salmon."
-
-    return {"mains": mains, "pairings": pairings, "message": message}
+def mock_craving_search(
+    parsed: dict[str, Any],
+    *,
+    what_sounds_good: str = "",
+    diets: list[str] | None = None,
+    intolerances: list[str] | None = None,
+    health_conditions: list[str] | None = None,
+) -> dict[str, Any]:
+    """Legacy wrapper — returns candidates only."""
+    candidates = mock_craving_candidates(
+        parsed,
+        what_sounds_good=what_sounds_good,
+        diets=diets,
+        intolerances=intolerances,
+        health_conditions=health_conditions,
+    )
+    return {"candidates": candidates, "mains": candidates[:12], "pairings": []}
 
 
 def mock_simplify_steps(
