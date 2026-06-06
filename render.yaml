@@ -19,7 +19,7 @@ services:
       - key: USE_MOCK_DATA
         value: "false"
       - key: APP_VERSION
-        value: "20250606-sounds"
+        value: "20250606-cards"
       - key: XAI_API_KEY
         sync: false
       - key: DATABASE_URL

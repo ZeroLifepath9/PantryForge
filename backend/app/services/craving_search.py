@@ -68,8 +68,8 @@ async def search_by_craving(
     candidates = _merge_candidates(raw_mains, raw_pairings)
     recipes, curator_mock = await curate_recipes(what_sounds_good, parsed, candidates)
 
-    if not message and recipes:
-        message = f"Grok found {len(recipes)} recipes that fit what sounds good."
+    if recipes:
+        message = f"Grok picked {len(recipes)} recipes that fit what sounds good."
 
     return {
         "what_sounds_good": what_sounds_good,

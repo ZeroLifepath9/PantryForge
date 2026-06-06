@@ -655,18 +655,21 @@ textarea { resize: vertical; min-height: 5rem; }
 .meal-card-grid {
   display: grid;
   gap: 0.75rem;
+  min-height: 4rem;
 }
 
-.results-scroll {
-  max-height: 420px;
+#recipes-list.results-scroll {
+  max-height: min(70vh, 42rem);
   overflow-y: auto;
-  padding-right: 0.25rem;
+  overflow-x: hidden;
+  padding-right: 0.35rem;
+  margin: 0.75rem 0 1rem;
 }
 
 .meal-card {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  gap: 0.85rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
   padding: 0.85rem;
   border: 2px solid var(--border);
   border-radius: 12px;
@@ -685,24 +688,34 @@ textarea { resize: vertical; min-height: 5rem; }
 }
 
 .meal-card input[type="checkbox"] {
-  grid-row: 1 / 3;
-  align-self: start;
+  flex: 0 0 auto;
   margin-top: 0.35rem;
   width: 1.1rem;
   height: 1.1rem;
   accent-color: var(--green);
 }
 
+.meal-card-inner {
+  display: flex;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .meal-card .result-thumb {
+  flex: 0 0 88px;
   width: 88px;
   height: 72px;
   object-fit: cover;
   border-radius: 8px;
-  grid-column: 2;
+}
+
+.result-thumb-placeholder {
+  background: var(--border);
 }
 
 .meal-card-body {
-  grid-column: 2;
+  flex: 1;
   min-width: 0;
 }
 
@@ -802,14 +815,12 @@ textarea { resize: vertical; min-height: 5rem; }
     grid-template-columns: 56px 1fr;
   }
   .tier { grid-column: 2; justify-self: start; }
-  .meal-card {
-    grid-template-columns: 1fr;
-  }
-  .meal-card input[type="checkbox"] {
-    grid-row: auto;
+  .meal-card-inner {
+    flex-direction: column;
   }
   .meal-card .result-thumb {
     width: 100%;
     height: 120px;
+    flex: none;
   }
 }

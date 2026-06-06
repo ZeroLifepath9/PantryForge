@@ -147,20 +147,39 @@ function categoryLabel(cat) {
   return { main: "Main", side: "Side", salad: "Salad", dip: "Dip" }[cat] || cat;
 }
 
-function renderMealCard(recipe, listId) {
+function escapeHtml(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function normalizeRecipes(data) {
+  if (data.recipes?.length) return data.recipes;
+  return [...(data.mains || []), ...(data.pairings || [])];
+}
+
+function renderMealCard(recipe) {
   const checked = selectedIds.has(recipe.id);
-  const catClass = `meal-card-${recipe.category}`;
+  const cat = recipe.category || "main";
+  const catClass = `meal-card-${cat}`;
+  const img = recipe.image
+    ? `<img class="result-thumb" src="${escapeHtml(recipe.image)}" alt="" loading="lazy" />`
+    : `<div class="result-thumb result-thumb-placeholder" aria-hidden="true"></div>`;
   return `
     <label class="meal-card ${catClass} ${checked ? "meal-card-selected" : ""}">
       <input type="checkbox" class="meal-select" data-recipe-id="${recipe.id}" ${checked ? "checked" : ""} />
-      <img class="result-thumb" src="${recipe.image || ""}" alt="" loading="lazy" />
-      <div class="meal-card-body">
-        <span class="meal-card-cat">${categoryLabel(recipe.category)}</span>
-        <strong class="result-title">${recipe.title}</strong>
-        ${recipe.fit_note ? `<p class="meal-card-fit">${recipe.fit_note}</p>` : ""}
-        <p class="meal-card-summary">${recipe.summary || ""}</p>
-        ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
-        <button type="button" class="btn-ghost btn-small view-recipe-btn" data-view-recipe="${recipe.id}">View recipe</button>
+      <div class="meal-card-inner">
+        ${img}
+        <div class="meal-card-body">
+          <span class="meal-card-cat">${categoryLabel(cat)}</span>
+          <strong class="result-title">${escapeHtml(recipe.title)}</strong>
+          ${recipe.fit_note ? `<p class="meal-card-fit">${escapeHtml(recipe.fit_note)}</p>` : ""}
+          ${recipe.summary ? `<p class="meal-card-summary">${escapeHtml(recipe.summary)}</p>` : ""}
+          ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
+          <button type="button" class="btn-ghost btn-small view-recipe-btn" data-view-recipe="${recipe.id}">View recipe</button>
+        </div>
       </div>
     </label>`;
 }
@@ -218,13 +237,23 @@ function renderCravingResults(data) {
   $("inspired-panel").classList.add("hidden");
   $("cook-panel").classList.add("hidden");
 
-  const recipes = data.recipes || [];
+  const recipes = normalizeRecipes(data);
   const total = recipes.length;
   $("results-heading").textContent = total ? `Recipes for you (${total})` : "Recipes for you";
-  $("results-message").textContent = data.message || "";
+  $("results-message").textContent = total
+    ? `Grok picked ${total} recipe${total === 1 ? "" : "s"} that fit what sounds good.`
+    : data.message || "No matches yet.";
   renderParsedCraving(data.parsed);
 
-  const list = $("recipes-list");
+  let list = $("recipes-list");
+  if (!list) {
+    const panel = $("results-panel");
+    list = document.createElement("div");
+    list.id = "recipes-list";
+    list.className = "meal-card-grid results-scroll";
+    panel?.appendChild(list);
+  }
+
   if (!total) {
     list.innerHTML = `<p class="hint">No matches. Try describing a protein, starch, or mood — or loosen diet filters.</p>`;
     updateSelectionUI();
