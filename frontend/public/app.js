@@ -315,6 +315,9 @@ async function enterSession(authData) {
 
 async function bootstrap() {
   try {
+    const health = await api("/healthz");
+    const tag = $("build-tag");
+    if (tag && health.version) tag.textContent = `Build ${health.version}`;
     meta = await api("/search/meta");
     renderDietOptions();
     renderIntoleranceOptions();

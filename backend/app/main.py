@@ -5,8 +5,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
 from app.api import auth_router, preferences_router, recipes_router, search_router
 from app.config import settings, validate_production_settings
 from app.database import init_db
@@ -25,6 +23,9 @@ def _static_dir() -> Path:
 
 
 STATIC_DIR = _static_dir()
+
+# Bump when shipping UI changes — breaks browser cache for static assets.
+APP_VERSION = os.environ.get("APP_VERSION", "20250606-alchemypantry")
 
 
 @asynccontextmanager
@@ -62,8 +63,17 @@ def _health_payload() -> dict:
     return {
         "status": "ok",
         "app": "alchemy-pantry",
+        "version": APP_VERSION,
         "mock_mode": settings.mock_mode,
         "env": settings.env,
+    }
+
+
+def _no_cache_headers() -> dict[str, str]:
+    return {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
     }
 
 
@@ -78,11 +88,19 @@ async def healthz():
 
 
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/static/{asset_path:path}")
+    async def static_asset(asset_path: str):
+        file_path = STATIC_DIR / asset_path
+        if not file_path.is_file():
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(file_path, headers=_no_cache_headers())
 
     @app.get("/")
     async def index():
         index_file = STATIC_DIR / "index.html"
         if index_file.exists():
-            return FileResponse(index_file)
-        return {"message": "Pantry Forge API"}
+            return FileResponse(index_file, headers=_no_cache_headers())
+        return {"message": "AlchemyPantry API"}

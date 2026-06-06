@@ -489,6 +489,12 @@ textarea { resize: vertical; min-height: 5rem; }
   padding: 2rem 1rem;
 }
 
+.build-tag {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
 @media (max-width: 640px) {
   .result-card summary {
     grid-template-columns: 56px 1fr;
