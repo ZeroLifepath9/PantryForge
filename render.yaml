@@ -19,7 +19,7 @@ services:
       - key: USE_MOCK_DATA
         value: "false"
       - key: APP_VERSION
-        value: "20250606-craving"
+        value: "20250606-sounds"
       - key: XAI_API_KEY
         sync: false
       - key: DATABASE_URL

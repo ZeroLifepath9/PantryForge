@@ -10,6 +10,7 @@ let approvedSubs = [];
 let stepMode = "beginner";
 let currentRecipeId = null;
 let prefsSaveTimer = null;
+let subsDebounce = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -156,6 +157,7 @@ function renderMealCard(recipe, listId) {
       <div class="meal-card-body">
         <span class="meal-card-cat">${categoryLabel(recipe.category)}</span>
         <strong class="result-title">${recipe.title}</strong>
+        ${recipe.fit_note ? `<p class="meal-card-fit">${recipe.fit_note}</p>` : ""}
         <p class="meal-card-summary">${recipe.summary || ""}</p>
         ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
         <button type="button" class="btn-ghost btn-small view-recipe-btn" data-view-recipe="${recipe.id}">View recipe</button>
@@ -166,8 +168,8 @@ function renderMealCard(recipe, listId) {
 function updateSelectionUI() {
   const count = selectedIds.size;
   $("selection-count").textContent = count
-    ? `${count} selected — pick mains and sides, then cook inspired by your choices.`
-    : "Select mains, sides, and salads to cook inspired by.";
+    ? `${count} recipe${count === 1 ? "" : "s"} selected`
+    : "Select the recipes you want to make.";
   $("inspired-btn").disabled = count === 0;
 }
 
@@ -216,25 +218,21 @@ function renderCravingResults(data) {
   $("inspired-panel").classList.add("hidden");
   $("cook-panel").classList.add("hidden");
 
-  const total = (data.mains?.length || 0) + (data.pairings?.length || 0);
-  $("results-heading").textContent = total ? `Your meal ideas (${total})` : "Your meal ideas";
+  const recipes = data.recipes || [];
+  const total = recipes.length;
+  $("results-heading").textContent = total ? `Recipes for you (${total})` : "Recipes for you";
   $("results-message").textContent = data.message || "";
   renderParsedCraving(data.parsed);
 
-  const mainsList = $("mains-list");
-  const pairingsList = $("pairings-list");
-
-  if (!data.mains?.length && !data.pairings?.length) {
-    mainsList.innerHTML = `<p class="hint">No matches. Try naming a protein or starch, or loosen diet filters.</p>`;
-    pairingsList.innerHTML = "";
+  const list = $("recipes-list");
+  if (!total) {
+    list.innerHTML = `<p class="hint">No matches. Try describing a protein, starch, or mood — or loosen diet filters.</p>`;
     updateSelectionUI();
     return;
   }
 
-  mainsList.innerHTML = (data.mains || []).map((r) => renderMealCard(r, "mains")).join("");
-  pairingsList.innerHTML = (data.pairings || []).map((r) => renderMealCard(r, "pairings")).join("");
-  bindMealCards(mainsList);
-  bindMealCards(pairingsList);
+  list.innerHTML = recipes.map((r) => renderMealCard(r)).join("");
+  bindMealCards(list);
   updateSelectionUI();
   $("results-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -292,7 +290,7 @@ async function openInspiredPanel() {
       .map(
         (ing) => `
         <label class="pantry-item">
-          <input type="checkbox" class="pantry-have" data-ing-key="${ing.key}" checked />
+          <input type="checkbox" class="pantry-have" data-ing-key="${ing.key}" />
           <span>
             <strong>${ing.name}</strong>
             ${ing.amount ? `<em>${ing.amount}</em>` : ""}
@@ -301,6 +299,8 @@ async function openInspiredPanel() {
         </label>`
       )
       .join("");
+    $("start-cook-btn").disabled = true;
+    scheduleSubstitutionFetch();
     setStatus($("inspired-status"), "");
   } catch (err) {
     setStatus($("inspired-status"), err.message, true);
@@ -316,7 +316,7 @@ function renderSubstitutions(subs) {
   const block = $("substitutions-block");
   if (!pendingSubstitutions.length) {
     block.classList.add("hidden");
-    $("start-cook-btn").disabled = false;
+    refreshCookButton();
     return;
   }
   block.classList.remove("hidden");
@@ -324,7 +324,7 @@ function renderSubstitutions(subs) {
     .map(
       (s, i) => `
       <label class="sub-item">
-        <input type="checkbox" class="sub-approve" data-sub-idx="${i}" />
+        <input type="checkbox" class="sub-approve" data-sub-idx="${i}" checked />
         <div>
           <strong>${s.original_name}</strong> → <strong>${s.substitute}</strong>
           <p class="hint">${s.purpose}: ${s.note}</p>
@@ -332,10 +332,10 @@ function renderSubstitutions(subs) {
       </label>`
     )
     .join("");
-  $("start-cook-btn").disabled = true;
   document.querySelectorAll(".sub-approve").forEach((cb) => {
     cb.addEventListener("change", updateApprovedSubs);
   });
+  updateApprovedSubs();
 }
 
 function updateApprovedSubs() {
@@ -351,36 +351,61 @@ function updateApprovedSubs() {
       });
     }
   });
-  const allHandled =
-    pendingSubstitutions.length === 0 ||
-    document.querySelectorAll(".sub-approve:checked").length > 0 ||
-    availableKeys().length === (inspiredSetup?.ingredients?.length || 0);
-  $("start-cook-btn").disabled = !allHandled && pendingSubstitutions.length > 0
-    ? document.querySelectorAll(".sub-approve:checked").length === 0
-    : false;
-  if (availableKeys().length === (inspiredSetup?.ingredients?.length || 0)) {
-    $("start-cook-btn").disabled = false;
+  refreshCookButton();
+}
+
+function refreshCookButton() {
+  const total = inspiredSetup?.ingredients?.length || 0;
+  const have = availableKeys().length;
+  if (!total) {
+    $("start-cook-btn").disabled = true;
+    return;
   }
+  if (have === total) {
+    $("start-cook-btn").disabled = false;
+    return;
+  }
+  if (!pendingSubstitutions.length) {
+    $("start-cook-btn").disabled = true;
+    return;
+  }
+  $("start-cook-btn").disabled = document.querySelectorAll(".sub-approve:checked").length === 0;
+}
+
+function scheduleSubstitutionFetch() {
+  clearTimeout(subsDebounce);
+  subsDebounce = setTimeout(() => suggestSubstitutions(), 450);
 }
 
 async function suggestSubstitutions() {
-  if (!selectedIds.size) return;
+  if (!selectedIds.size || !inspiredSetup) return;
+  const have = availableKeys();
+  const total = inspiredSetup.ingredients?.length || 0;
+  if (have.length === total) {
+    pendingSubstitutions = [];
+    approvedSubs = [];
+    $("substitutions-block").classList.add("hidden");
+    refreshCookButton();
+    setStatus($("inspired-status"), "You have everything — ready to cook.");
+    return;
+  }
   setStatus($("inspired-status"), "Finding alternatives…");
   try {
     const data = await api("/cook/inspired/substitutions", {
       method: "POST",
       body: JSON.stringify({
         recipe_ids: [...selectedIds],
-        available_keys: availableKeys(),
+        available_keys: have,
         what_sounds_good: soundsGoodText() || null,
       }),
     });
     renderSubstitutions(data.substitutions);
     if (!data.substitutions?.length) {
-      setStatus($("inspired-status"), "You have everything listed — ready to cook.");
-      $("start-cook-btn").disabled = false;
+      setStatus($("inspired-status"), "Check what you have to continue.");
+      refreshCookButton();
     } else {
-      setStatus($("inspired-status"), "Approve the swaps you want to use.");
+      setStatus($("inspired-status"), "Approve alternatives for items you don't have.");
+      refreshCookButton();
     }
   } catch (err) {
     setStatus($("inspired-status"), err.message, true);
@@ -563,7 +588,6 @@ $("sign-out")?.addEventListener("click", () => {
 
 $("search-btn")?.addEventListener("click", runSearch);
 $("inspired-btn")?.addEventListener("click", openInspiredPanel);
-$("suggest-subs-btn")?.addEventListener("click", suggestSubstitutions);
 $("start-cook-btn")?.addEventListener("click", startInspiredCook);
 
 $("back-to-results")?.addEventListener("click", () => {
@@ -615,10 +639,8 @@ document.addEventListener("change", (e) => {
     schedulePrefsSave();
   }
   if (e.target.matches(".pantry-have")) {
-    $("substitutions-block").classList.add("hidden");
-    pendingSubstitutions = [];
     approvedSubs = [];
-    $("start-cook-btn").disabled = false;
+    scheduleSubstitutionFetch();
   }
 });
 

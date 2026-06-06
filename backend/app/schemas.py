@@ -204,6 +204,7 @@ class MealRecipeCard(BaseModel):
     category: DishCategory
     image: str | None = None
     summary: str | None = None
+    fit_note: str | None = None
     ready_in_minutes: int | None = None
     servings: int | None = None
     source_url: str | None = None
@@ -220,8 +221,7 @@ class CravingSearchRequest(BaseModel):
 class CravingSearchResponse(BaseModel):
     what_sounds_good: str
     parsed: CravingParsed
-    mains: list[MealRecipeCard] = []
-    pairings: list[MealRecipeCard] = []
+    recipes: list[MealRecipeCard] = []
     mock: bool = False
     message: str | None = None
 

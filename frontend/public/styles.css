@@ -720,6 +720,13 @@ textarea { resize: vertical; min-height: 5rem; }
   color: #3d5a80;
 }
 
+.meal-card-fit {
+  margin: 0.2rem 0;
+  font-size: 0.88rem;
+  color: var(--green);
+  font-weight: 600;
+}
+
 .meal-card-summary {
   margin: 0.25rem 0;
   font-size: 0.9rem;

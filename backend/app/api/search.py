@@ -53,8 +53,7 @@ async def search_craving_endpoint(body: CravingSearchRequest):
     return CravingSearchResponse(
         what_sounds_good=payload["what_sounds_good"],
         parsed=CravingParsed(**payload["parsed"]),
-        mains=[MealRecipeCard(**m) for m in payload["mains"]],
-        pairings=[MealRecipeCard(**m) for m in payload["pairings"]],
+        recipes=[MealRecipeCard(**m) for m in payload["recipes"]],
         mock=is_mock,
         message=payload.get("message"),
     )
