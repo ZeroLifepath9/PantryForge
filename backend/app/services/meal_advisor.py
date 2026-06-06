@@ -13,26 +13,35 @@ from app.services.xai_client import chat_completion
 ADVISOR_SYSTEM = """You are the AlchemyPantry cooking advisor: practical, warm, and direct.
 You help home cooks use what they have, respect health restrictions, and elevate meals.
 
+TWO INPUT LAYERS:
+1. "ingredients" / pantry — what they actually have (Spoonacular already searched from this).
+2. "what_sounds_good" — mood, craving, texture, cuisine vibe. Weight this heavily when ranking and comparing.
+
 SCOPE:
-- Recommend from the recipe list provided (mains AND suggest complementary sides, salads, dips, sauces).
-- Explain WHY picks fit their restrictions and what sounds good to them.
-- Give upgrade advice: e.g. brined vs raw store meat, resting meat, toasting spices, finishing acids.
-- Never invent recipes not in the list for "top_picks" with a recipe_id — use recipe_id from JSON only.
-- You MAY suggest generic sides/salads/dips (no recipe_id) when pantry ingredients support them.
+- Compare recipes in the list: trade-offs (time, missing items, diet fit, vibe match).
+- Pick mains from the recipe list AND suggest complementary sides, salads, dips, sauces when sensible.
+- Explain WHY each pick fits restrictions, pantry, and what sounds good.
+- Never invent recipes with a recipe_id — only use ids from the provided recipe list.
+- You MAY suggest generic sides/salads/dips (recipe_id null) when pantry ingredients support them.
+
+DEEPER INSIGHT (when deeper_insight is true):
+- Add sections on protein preparation (brined vs store-bought, pat dry, resting, internal temps).
+- Explain cooking methods that elevate the dish (sear vs simmer, when to add acid, finishing fats).
+- Compare 2–3 top options directly: "If you want X choose A; if you want Y choose B."
 
 RULES:
 - Honor ALL diets, intolerances, and medical conditions in the payload.
-- No medical diagnosis — frame as general cooking guidance; suggest consulting a clinician for strict medical diets.
-- Be concise; each section body 2-4 sentences unless upgrade topic needs one short paragraph.
+- No medical diagnosis — general cooking guidance only; suggest consulting a clinician for strict medical diets.
+- Be concise unless deeper_insight is true (then technique sections may be one short paragraph each).
 - Output ONLY valid JSON, no markdown fences, matching this schema:
 {
   "headline": "short encouraging title",
-  "summary": "2-3 sentence overview",
+  "summary": "2-3 sentence overview comparing best fits to what sounds good",
   "top_picks": [
     {
       "category": "main|side|salad|dip|upgrade|pairing",
       "title": "name",
-      "why": "why it fits restrictions and pantry",
+      "why": "why it fits restrictions, pantry, and craving",
       "recipe_id": null or integer from recipe list
     }
   ],
@@ -41,10 +50,11 @@ RULES:
   ]
 }
 
-Include at least one section on technique or ingredient upgrades when meat, poultry, or fish appear in ingredients or recipes.
+Always include at least one side, salad, or dip when ingredients allow.
+Include technique or protein-prep guidance when meat, poultry, or fish appear in ingredients or recipes.
 """
 
-ADVISOR_PROMPT_VERSION = "alchemy-advisor-v1"
+ADVISOR_PROMPT_VERSION = "alchemy-advisor-v2"
 
 
 def _label_map(options: list[dict[str, str]]) -> dict[str, str]:
@@ -98,6 +108,7 @@ def mock_meal_insights(
     health_conditions: list[str],
     recipes: list[dict[str, Any]],
     what_sounds_good: str | None = None,
+    deeper_insight: bool = False,
 ) -> dict[str, Any]:
     restrictions = _restriction_labels(diets, intolerances, health_conditions)
     active_filters = (
@@ -165,17 +176,21 @@ def mock_meal_insights(
         },
     ]
 
-    if any(k in ing_lower for k in ("chicken", "pork", "beef", "meat")):
-        sections.append({
-            "heading": "Brined vs raw from the store",
-            "body": (
-                "Raw poultry from the package is fine but often bland and can dry out. "
-                "A quick brine (salt + water, 30 minutes to overnight) seasons meat through and "
-                "helps it stay juicy — especially for skillet or roast dishes. "
-                "Pre-brined or kosher birds are already salted; taste before adding more salt. "
-                "Pat dry before searing so you get color, not steam."
-            ),
-        })
+    has_protein = any(k in ing_lower for k in ("chicken", "pork", "beef", "meat", "fish", "salmon", "shrimp"))
+    if has_protein:
+        body = (
+            "Raw poultry from the package is fine but often bland and can dry out. "
+            "A quick brine (salt + water, 30 minutes to overnight) seasons meat through and "
+            "helps it stay juicy — especially for skillet or roast dishes. "
+            "Pre-brined or kosher birds are already salted; taste before adding more salt. "
+            "Pat dry before searing so you get color, not steam."
+        )
+        if deeper_insight:
+            body += (
+                " For skillet chicken: medium-high heat, don't crowd the pan, and let pieces sit "
+                "until they release naturally before flipping. Rest 5 minutes before slicing."
+            )
+        sections.append({"heading": "Brined vs raw from the store", "body": body})
     else:
         sections.append({
             "heading": "Small upgrades that matter",
@@ -183,6 +198,17 @@ def mock_meal_insights(
                 "Toast dried spices in the pan for 30 seconds before adding fat. "
                 "Finish with a squeeze of lemon or splash of vinegar to brighten egg and tomato dishes. "
                 "Rest cooked proteins 3–5 minutes before slicing so juices stay in the plate."
+            ),
+        })
+
+    if deeper_insight and len(mains) >= 2:
+        compare = " vs ".join(r.get("title", "option") for r in mains[:2])
+        sections.append({
+            "heading": "Comparing your top options",
+            "body": (
+                f"Between {compare}: pick the one with fewer missed ingredients if you want fastest path; "
+                f"pick the other if it better matches what sounds good{craving.rstrip('.')}. "
+                "Both can share the same side salad from your tomato and herbs."
             ),
         })
 
@@ -248,6 +274,7 @@ async def generate_meal_insights(
     health_conditions: list[str] | None = None,
     recipes: list[dict[str, Any]] | None = None,
     what_sounds_good: str | None = None,
+    deeper_insight: bool = False,
 ) -> dict[str, Any]:
     diets = diets or []
     intolerances = intolerances or []
@@ -262,12 +289,14 @@ async def generate_meal_insights(
             health_conditions=health_conditions,
             recipes=recipes,
             what_sounds_good=what_sounds_good,
+            deeper_insight=deeper_insight,
         )
 
     payload = {
         "ingredients": ingredients,
         "restrictions": _restriction_labels(diets, intolerances, health_conditions),
         "what_sounds_good": what_sounds_good,
+        "deeper_insight": deeper_insight,
         "recipes": _recipe_payload(recipes),
     }
     user_content = (
@@ -291,6 +320,7 @@ async def generate_meal_insights(
             health_conditions=health_conditions,
             recipes=recipes,
             what_sounds_good=what_sounds_good,
+            deeper_insight=deeper_insight,
         )
         fallback["summary"] = (
             "AI advisor is temporarily unavailable — showing rule-based guidance. "

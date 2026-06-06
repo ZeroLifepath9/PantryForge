@@ -10,6 +10,106 @@ let prefsSaveTimer = null;
 
 const $ = (id) => document.getElementById(id);
 
+const COMPOUND_INGREDIENTS = [
+  "olive oil",
+  "vegetable oil",
+  "coconut oil",
+  "sesame oil",
+  "bell pepper",
+  "green onion",
+  "red onion",
+  "sweet potato",
+  "sour cream",
+  "cream cheese",
+  "goat cheese",
+  "parmesan cheese",
+  "cheddar cheese",
+  "brown sugar",
+  "powdered sugar",
+  "soy sauce",
+  "fish sauce",
+  "hot sauce",
+  "baking powder",
+  "baking soda",
+  "black pepper",
+  "ground beef",
+  "chicken breast",
+  "chicken thigh",
+];
+
+const COMPOUND_STARTS = new Set(
+  COMPOUND_INGREDIENTS.map((p) => p.split(" ")[0]).filter((w) => w.length > 2)
+);
+
+function tokenizeIngredientLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return [];
+  if (trimmed.includes(",")) {
+    return trimmed
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const tokens = [];
+  let i = 0;
+  while (i < words.length) {
+    let matched = null;
+    for (let len = Math.min(4, words.length - i); len >= 2; len -= 1) {
+      const phrase = words.slice(i, i + len).join(" ").toLowerCase();
+      if (COMPOUND_INGREDIENTS.includes(phrase)) {
+        matched = words.slice(i, i + len).join(" ");
+        i += len;
+        break;
+      }
+    }
+    if (matched) {
+      tokens.push(matched);
+    } else {
+      const word = words[i];
+      if (!/^\d+$/.test(word)) tokens.push(word);
+      i += 1;
+    }
+  }
+  return tokens;
+}
+
+function formatIngredientText(text) {
+  const lines = text.split("\n");
+  const formatted = lines
+    .map((line) => {
+      const tokens = tokenizeIngredientLine(line);
+      return tokens.join(", ");
+    })
+    .filter((line, idx, arr) => line || idx < arr.length - 1);
+  return formatted.join("\n").replace(/,\s*,+/g, ", ").replace(/,\s*$/gm, "");
+}
+
+function autoCommaOnInput(el) {
+  const value = el.value;
+  const pos = el.selectionStart;
+  if (pos === null || pos < 2) return;
+
+  const before = value.slice(0, pos);
+  const after = value.slice(pos);
+  if (!before.endsWith(" ")) return;
+
+  const lineStart = before.lastIndexOf("\n") + 1;
+  const line = before.slice(lineStart);
+  if (line.includes(",")) return;
+
+  const words = line.trimEnd().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return;
+
+  const prevWord = words[words.length - 2].toLowerCase();
+  if (COMPOUND_STARTS.has(prevWord)) return;
+
+  const newBefore = before.slice(0, -1) + ", ";
+  el.value = newBefore + after;
+  const newPos = newBefore.length;
+  el.setSelectionRange(newPos, newPos);
+}
+
 function formatApiError(data, fallback = "Request failed") {
   const detail = data?.detail;
   if (typeof detail === "string") return detail;
@@ -246,6 +346,7 @@ async function loadAdvisorInsights(searchData) {
         health_conditions: selectedHealthConditions(),
         recipes: lastResults,
         what_sounds_good: soundsGood,
+        deeper_insight: $("explain-techniques")?.checked ?? false,
       }),
     });
     renderAdvisor(data);
@@ -374,7 +475,9 @@ async function loadSimplifiedSteps() {
 }
 
 async function runSearch() {
-  const text = $("ingredient-input").value.trim();
+  const input = $("ingredient-input");
+  input.value = formatIngredientText(input.value);
+  const text = input.value.trim();
   if (!text) {
     setStatus($("search-status"), "Add at least one ingredient.", true);
     return;
@@ -508,6 +611,14 @@ $("sign-out").addEventListener("click", () => {
 });
 
 $("search-btn").addEventListener("click", runSearch);
+
+const ingredientInput = $("ingredient-input");
+if (ingredientInput) {
+  ingredientInput.addEventListener("input", () => autoCommaOnInput(ingredientInput));
+  ingredientInput.addEventListener("blur", () => {
+    ingredientInput.value = formatIngredientText(ingredientInput.value);
+  });
+}
 
 $("back-to-results").addEventListener("click", () => {
   $("recipe-panel").classList.add("hidden");

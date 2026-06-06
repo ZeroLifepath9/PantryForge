@@ -17,9 +17,9 @@ services:
       - key: RENDER
         value: "true"
       - key: USE_MOCK_DATA
-        value: "true"
+        value: "false"
       - key: APP_VERSION
-        value: "20250606-advisor"
+        value: "20250606-live"
       - key: XAI_API_KEY
         sync: false
       - key: DATABASE_URL

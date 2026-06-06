@@ -54,10 +54,14 @@ class Settings(BaseSettings):
 
     @property
     def mock_mode(self) -> bool:
-        if _env_value("USE_MOCK_DATA").lower() in ("0", "false", "no"):
+        explicit = _env_value("USE_MOCK_DATA").lower()
+        if explicit in ("0", "false", "no"):
             return False
-        if self.use_mock_data and not self.spoonacular_api_key:
+        if explicit in ("1", "true", "yes"):
             return True
+        # When Spoonacular is configured, default to live recipe search.
+        if self.spoonacular_api_key:
+            return False
         return self.use_mock_data
 
     def cors_origin_list(self) -> list[str]:

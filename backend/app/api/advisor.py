@@ -17,6 +17,7 @@ async def advisor_insights(body: AdvisorInsightsRequest):
         health_conditions=body.health_conditions,
         recipes=recipe_dicts,
         what_sounds_good=body.what_sounds_good,
+        deeper_insight=body.deeper_insight,
     )
     return AdvisorInsightsResponse(**result)
 

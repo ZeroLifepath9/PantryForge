@@ -1,4 +1,4 @@
-"""Recipe search facade — mock now, Spoonacular when API key is set."""
+"""Recipe search facade — Spoonacular when API key is set, mock otherwise."""
 
 from __future__ import annotations
 
@@ -25,8 +25,10 @@ async def search_recipes(
             pantry_staples=pantry_staples or settings.pantry_staple_list(),
         )
         return payload, True
-    # Phase 2: Spoonacular API
-    payload = mock_data.mock_search_recipes(
+
+    from app.services import spoonacular
+
+    payload = await spoonacular.search_recipes(
         ingredients,
         diets=diets,
         intolerances=intolerances,
@@ -34,10 +36,18 @@ async def search_recipes(
         include_pantry_staples=include_pantry_staples,
         pantry_staples=pantry_staples or settings.pantry_staple_list(),
     )
-    return payload, True
+    return payload, False
 
 
 async def get_recipe_detail(recipe_id: int) -> tuple[dict | None, bool]:
     if settings.mock_mode or not settings.spoonacular_api_key:
         return mock_data.mock_recipe_detail(recipe_id), True
-    return mock_data.mock_recipe_detail(recipe_id), True
+
+    from app.services import spoonacular
+
+    detail = await spoonacular.get_recipe_detail(recipe_id)
+    if detail:
+        return detail, False
+    # Spoonacular miss — fall back to mock ids for dev continuity
+    mock = mock_data.mock_recipe_detail(recipe_id)
+    return mock, mock is not None

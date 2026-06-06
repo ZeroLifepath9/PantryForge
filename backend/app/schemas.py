@@ -161,6 +161,7 @@ class AdvisorInsightsRequest(BaseModel):
     health_conditions: list[str] = []
     recipes: list[AdvisorRecipeInput] = []
     what_sounds_good: str | None = Field(default=None, max_length=500)
+    deeper_insight: bool = False
 
 
 class AdvisorPick(BaseModel):
