@@ -1,7 +1,14 @@
 const API = "";
 let token = localStorage.getItem("pf_token") || "";
 let isGuest = false;
-let meta = { diets: [], intolerances: [], health_conditions: [], mock_mode: true };
+let meta = {
+  diets: [],
+  intolerances: [],
+  health_conditions: [],
+  mock_mode: true,
+  xai_configured: false,
+  spoonacular_configured: false,
+};
 let lastCraving = null;
 let selectedIds = new Set();
 let inspiredSetup = null;
@@ -286,7 +293,10 @@ async function runSearch() {
       }),
     });
     renderCravingResults(data);
-    setStatus($("search-status"), data.mock ? "Showing guidance-mode results." : "Meal ideas ready.");
+    setStatus(
+      $("search-status"),
+      data.live ? "Live recipes from Spoonacular." : data.message || "Results ready."
+    );
   } catch (err) {
     setStatus($("search-status"), err.message, true);
   } finally {
@@ -550,7 +560,17 @@ async function bootstrap() {
     renderChipOptions("diet-options", meta.diets, "diet", "chip-diet");
     renderChipOptions("intolerance-options", meta.intolerances, "intolerance", "chip-allergy");
     renderChipOptions("health-condition-options", meta.health_conditions, "health-condition", "chip-medical");
-    if (meta.mock_mode) $("mock-badge").classList.remove("hidden");
+    const badge = $("mock-badge");
+    if (badge) {
+      if (meta.mock_mode) {
+        badge.textContent = meta.spoonacular_configured
+          ? "Partial demo mode"
+          : "Demo recipes — API keys not active";
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    }
   } catch {
     setStatus($("auth-status"), "Could not reach API. Is the server running?", true);
     showLanding();

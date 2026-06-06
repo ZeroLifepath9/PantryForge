@@ -14,7 +14,7 @@ async def chat_completion(
     model: str | None = None,
     temperature: float = 0.5,
 ) -> str:
-    if not settings.xai_api_key:
+    if not settings.xai_key:
         raise ValueError("XAI_API_KEY is not configured")
 
     model = model or settings.xai_model
@@ -24,7 +24,7 @@ async def chat_completion(
         response = await client.post(
             url,
             headers={
-                "Authorization": f"Bearer {settings.xai_api_key}",
+                "Authorization": f"Bearer {settings.xai_key}",
                 "Content-Type": "application/json",
             },
             json={

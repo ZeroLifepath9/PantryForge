@@ -430,6 +430,36 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "instructions": ["Cook rice filling with tomato.", "Stuff peppers.", "Bake until peppers soften."],
     },
     {
+        "id": 1026,
+        "title": "Garlic Butter Steak Bites",
+        "image": "https://images.unsplash.com/photo-1600891964092-4316c288032e?w=400",
+        "summary": "Seared beef steak bites with garlic butter and pepper.",
+        "ready_in_minutes": 22,
+        "servings": 2,
+        "diets": ["gluten-free", "dairy-free", "ketogenic"],
+        "intolerance_conflicts": ["dairy"],
+        "health_friendly": ["diabetes", "anti-inflammatory"],
+        "required": ["beef", "steak", "garlic", "butter", "salt", "pepper", "olive oil"],
+        "source_url": "https://example.com/garlic-butter-steak-bites",
+        "video_url": None,
+        "instructions": ["Cut steak into bites.", "Sear in hot oil.", "Toss with garlic butter."],
+    },
+    {
+        "id": 1027,
+        "title": "Shrimp Garlic Noodles",
+        "image": "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400",
+        "summary": "Quick noodles with shrimp, garlic, and soy glaze.",
+        "ready_in_minutes": 20,
+        "servings": 2,
+        "diets": ["dairy-free"],
+        "intolerance_conflicts": ["shellfish", "gluten", "soy", "wheat"],
+        "health_friendly": ["diabetes"],
+        "required": ["shrimp", "noodles", "garlic", "soy sauce", "oil", "onion"],
+        "source_url": "https://example.com/shrimp-garlic-noodles",
+        "video_url": None,
+        "instructions": ["Cook noodles.", "Sauté shrimp and garlic.", "Toss with sauce."],
+    },
+    {
         "id": 1025,
         "title": "Tomato Basil Bruschetta",
         "image": "https://images.unsplash.com/photo-1572441713132-51c75654db73?w=400",
@@ -680,9 +710,68 @@ def _mock_card(recipe: dict[str, Any], category: str) -> dict[str, Any]:
     }
 
 
+_STOPWORDS = frozenset({
+    "something", "with", "and", "the", "for", "that", "good", "sounds", "like",
+    "want", "some", "have", "what", "your", "side", "fresh", "food", "meal",
+})
+
+
+def _craving_blob(recipe: dict[str, Any]) -> str:
+    title = recipe.get("title", "").lower()
+    required = " ".join(recipe.get("required", [])).lower()
+    summary = (recipe.get("summary") or "").lower()
+    return f"{title} {required} {summary}"
+
+
+def _score_mock_recipe(
+    recipe: dict[str, Any],
+    *,
+    category: str,
+    parsed: dict[str, Any],
+    what_sounds_good: str,
+) -> int:
+    blob = _craving_blob(recipe)
+    protein = (parsed.get("protein") or "").lower()
+    starches = [s.lower() for s in parsed.get("starches") or []]
+    terms = set(parsed.get("search_terms") or [])
+    query_words = [
+        w for w in re.findall(r"[a-z]{3,}", what_sounds_good.lower())
+        if w not in _STOPWORDS
+    ]
+
+    if protein and category == "main":
+        if protein not in blob:
+            return -1
+
+    score = 0
+    if protein and protein in blob:
+        score += 20
+    for s in starches:
+        stem = s.rstrip("s")
+        if stem in blob:
+            score += 8
+    for t in terms:
+        if t and t in blob:
+            score += 4
+    for w in query_words:
+        if w in blob:
+            score += 3
+
+    mood = parsed.get("mood")
+    if mood == "light" and any(w in blob for w in ("salad", "fresh", "light", "tomato")):
+        score += 3
+    if mood == "comfort" and any(w in blob for w in ("pasta", "cheese", "stew", "creamy", "rice")):
+        score += 3
+
+    if category == "main" and score == 0 and (protein or starches or query_words):
+        return -1
+    return score
+
+
 def mock_craving_search(
     parsed: dict[str, Any],
     *,
+    what_sounds_good: str = "",
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
     health_conditions: list[str] | None = None,
@@ -690,9 +779,6 @@ def mock_craving_search(
     diets = diets or []
     intolerances = intolerances or []
     health_conditions = health_conditions or []
-    protein = (parsed.get("protein") or "").lower()
-    starches = [s.lower() for s in parsed.get("starches") or []]
-    terms = set(parsed.get("search_terms") or [])
 
     candidates: list[tuple[str, dict[str, Any], int]] = []
     for recipe in MOCK_RECIPES:
@@ -703,37 +789,23 @@ def mock_craving_search(
         if not _recipe_matches_health_conditions(recipe, health_conditions):
             continue
         category = _mock_recipe_category(recipe)
-        title = recipe["title"].lower()
-        required = " ".join(recipe.get("required", [])).lower()
-        score = 0
-        if protein and (protein in title or protein in required):
-            score += 10
-        for s in starches:
-            if s.rstrip("s") in title or s.rstrip("s") in required:
-                score += 4
-        for t in terms:
-            if t in title or t in required:
-                score += 2
-        if category == "main" and protein:
-            score += 3
+        score = _score_mock_recipe(
+            recipe,
+            category=category,
+            parsed=parsed,
+            what_sounds_good=what_sounds_good,
+        )
+        if score < 0:
+            continue
+        if score == 0 and (parsed.get("protein") or parsed.get("starches") or what_sounds_good.strip()):
+            continue
         candidates.append((category, recipe, score))
 
-    mains_pool = [(r, s) for c, r, s in candidates if c == "main"]
+    mains_pool = [(r, s) for c, r, s in candidates if c == "main" and s > 0]
     mains_pool.sort(key=lambda x: x[1], reverse=True)
     mains = [_mock_card(r, "main") for r, _ in mains_pool[:5]]
 
-    if len(mains) < 5:
-        extra = [(r, s) for c, r, s in candidates if c == "main"]
-        extra.sort(key=lambda x: x[1], reverse=True)
-        seen = {m["id"] for m in mains}
-        for r, _ in extra:
-            if r["id"] not in seen:
-                mains.append(_mock_card(r, "main"))
-                seen.add(r["id"])
-            if len(mains) >= 5:
-                break
-
-    pair_pool = [(r, s) for c, r, s in candidates if c in ("side", "salad", "dip")]
+    pair_pool = [(r, s) for c, r, s in candidates if c in ("side", "salad", "dip") and s > 0]
     pair_pool.sort(key=lambda x: x[1], reverse=True)
     pairings: list[dict[str, Any]] = []
     seen_ids = {m["id"] for m in mains}
@@ -746,10 +818,8 @@ def mock_craving_search(
             break
 
     message = None
-    if not mains:
-        message = "No main courses matched your craving — try naming a protein or starch."
-    elif pairings:
-        message = f"Found {len(mains)} mains and {len(pairings)} sides, salads, and dips."
+    if not mains and not pairings:
+        message = "No demo recipes matched that craving — try chicken, salmon, pasta, or eggs."
 
     return {"mains": mains, "pairings": pairings, "message": message}
 

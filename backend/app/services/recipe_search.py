@@ -15,7 +15,7 @@ async def search_recipes(
     include_pantry_staples: bool = True,
     pantry_staples: list[str] | None = None,
 ) -> tuple[dict, bool]:
-    if settings.mock_mode or not settings.spoonacular_api_key:
+    if settings.mock_mode or not settings.spoonacular_key:
         payload = mock_data.mock_search_recipes(
             ingredients,
             diets=diets,
@@ -40,7 +40,7 @@ async def search_recipes(
 
 
 async def get_recipe_detail(recipe_id: int) -> tuple[dict | None, bool]:
-    if settings.mock_mode or not settings.spoonacular_api_key:
+    if settings.mock_mode or not settings.spoonacular_key:
         return mock_data.mock_recipe_detail(recipe_id), True
 
     from app.services import spoonacular

@@ -112,7 +112,7 @@ async def _request(
     params: dict[str, Any] | None = None,
 ) -> Any:
     query = dict(params or {})
-    query["apiKey"] = settings.spoonacular_api_key
+    query["apiKey"] = settings.spoonacular_key
     response = await client.get(f"{BASE_URL}{path}", params=query)
     response.raise_for_status()
     return response.json()
@@ -472,7 +472,7 @@ async def search_by_craving(
         if len(mains) >= 5:
             break
 
-    if len(mains) < 5:
+    if len(mains) < 5 and not protein:
         for card in mains_raw:
             if card["id"] in seen:
                 continue

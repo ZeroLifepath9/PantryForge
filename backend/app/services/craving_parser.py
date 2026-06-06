@@ -156,7 +156,7 @@ async def parse_craving(text: str) -> tuple[dict[str, Any], bool]:
     if not text:
         raise ValueError("what_sounds_good is required")
 
-    if not settings.xai_api_key:
+    if not settings.xai_key:
         return mock_parse_craving(text), True
 
     user_content = f'Parse this craving: "{text}"'

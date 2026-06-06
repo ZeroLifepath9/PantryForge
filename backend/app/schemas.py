@@ -139,6 +139,8 @@ class DietOption(BaseModel):
 
 class MetaResponse(BaseModel):
     mock_mode: bool
+    xai_configured: bool = False
+    spoonacular_configured: bool = False
     diets: list[DietOption]
     intolerances: list[DietOption]
     health_conditions: list[DietOption]
@@ -223,6 +225,7 @@ class CravingSearchResponse(BaseModel):
     parsed: CravingParsed
     recipes: list[MealRecipeCard] = []
     mock: bool = False
+    live: bool = False
     message: str | None = None
 
 

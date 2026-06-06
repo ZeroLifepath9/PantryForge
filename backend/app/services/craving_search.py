@@ -33,7 +33,7 @@ async def search_by_craving(
     intolerances = intolerances or []
     health_conditions = health_conditions or []
 
-    use_live = bool(settings.spoonacular_api_key) and not settings.mock_mode
+    use_live = bool(settings.spoonacular_key) and not settings.mock_mode
 
     raw_mains: list = []
     raw_pairings: list = []
@@ -57,6 +57,7 @@ async def search_by_craving(
     if search_mock:
         result = mock_data.mock_craving_search(
             parsed,
+            what_sounds_good=what_sounds_good,
             diets=diets,
             intolerances=intolerances,
             health_conditions=health_conditions,
@@ -68,12 +69,25 @@ async def search_by_craving(
     candidates = _merge_candidates(raw_mains, raw_pairings)
     recipes, curator_mock = await curate_recipes(what_sounds_good, parsed, candidates)
 
+    live = use_live and not search_mock
     if recipes:
-        message = f"Grok picked {len(recipes)} recipes that fit what sounds good."
+        if live:
+            message = f"Found {len(recipes)} recipes matching your craving."
+        else:
+            message = (
+                f"Demo: {len(recipes)} recipes matched your craving. "
+                "Set SPOONACULAR_API_KEY and XAI_API_KEY on Render for live results."
+            )
+    elif not live:
+        message = (
+            "No demo recipes matched — try chicken, salmon, pasta, or eggs. "
+            "Add API keys on Render for real recipe search."
+        )
 
     return {
         "what_sounds_good": what_sounds_good,
         "parsed": parsed,
         "recipes": recipes,
         "message": message,
+        "live": live,
     }, search_mock and parse_mock and curator_mock

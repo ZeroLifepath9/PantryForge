@@ -17,6 +17,22 @@ def _env_value(*names: str) -> str:
     return ""
 
 
+def _resolved_spoonacular_key() -> str:
+    return _env_value(
+        "SPOONACULAR_API_KEY",
+        "spoonacular_API_KEY",
+        "SPOONACULAR_KEY",
+    )
+
+
+def _resolved_xai_key() -> str:
+    return _env_value(
+        "XAI_API_KEY",
+        "xai_API_KEY",
+        "XAI_KEY",
+    )
+
+
 def _valid_jwt(secret: str) -> bool:
     return bool(secret) and secret != _DEV_JWT and len(secret) >= 32
 
@@ -53,15 +69,23 @@ class Settings(BaseSettings):
         return self.env.strip().lower() in ("production", "prod")
 
     @property
+    def spoonacular_key(self) -> str:
+        return _resolved_spoonacular_key() or self.spoonacular_api_key
+
+    @property
+    def xai_key(self) -> str:
+        return _resolved_xai_key() or self.xai_api_key
+
+    @property
     def mock_mode(self) -> bool:
         explicit = _env_value("USE_MOCK_DATA").lower()
         if explicit in ("0", "false", "no"):
             return False
+        # Live APIs when keys are present (even if USE_MOCK_DATA defaulted true).
+        if self.spoonacular_key or self.xai_key:
+            return False
         if explicit in ("1", "true", "yes"):
             return True
-        # When Spoonacular is configured, default to live recipe search.
-        if self.spoonacular_api_key:
-            return False
         return self.use_mock_data
 
     def cors_origin_list(self) -> list[str]:
@@ -86,10 +110,10 @@ class Settings(BaseSettings):
         jwt = _env_value("JWT_SECRET")
         if jwt:
             self.jwt_secret = jwt
-        spoon = _env_value("SPOONACULAR_API_KEY")
+        spoon = _resolved_spoonacular_key()
         if spoon:
             self.spoonacular_api_key = spoon
-        xai = _env_value("XAI_API_KEY")
+        xai = _resolved_xai_key()
         if xai:
             self.xai_api_key = xai
         db_url = _env_value("DATABASE_URL")
@@ -128,7 +152,7 @@ def validate_production_settings() -> None:
 
     print(
         f"[pantry-forge] startup: env={settings.env} mock_mode={settings.mock_mode} "
-        f"spoonacular={'set' if settings.spoonacular_api_key else 'off'} "
-        f"xai={'set' if settings.xai_api_key else 'off'}",
+        f"spoonacular={'set' if settings.spoonacular_key else 'off'} "
+        f"xai={'set' if settings.xai_key else 'off'}",
         flush=True,
     )

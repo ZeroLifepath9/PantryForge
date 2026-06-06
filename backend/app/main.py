@@ -25,7 +25,7 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 # Bump when shipping UI changes — breaks browser cache for static assets.
-APP_VERSION = os.environ.get("APP_VERSION", "20250606-cards")
+APP_VERSION = os.environ.get("APP_VERSION", "20250606-live-search")
 
 
 @asynccontextmanager
@@ -67,7 +67,8 @@ def _health_payload() -> dict:
         "app": "alchemy-pantry",
         "version": APP_VERSION,
         "mock_mode": settings.mock_mode,
-        "xai_configured": bool(settings.xai_api_key),
+        "xai_configured": bool(settings.xai_key),
+        "spoonacular_configured": bool(settings.spoonacular_key),
         "env": settings.env,
     }
 

@@ -89,9 +89,13 @@ def mock_curate_recipes(
         scored.append((score, enriched))
 
     scored.sort(key=lambda x: x[0], reverse=True)
+    max_score = scored[0][0] if scored else 0
+    min_score = 4 if protein else 1
     seen: set[int] = set()
     result: list[dict[str, Any]] = []
-    for _, card in scored:
+    for score, card in scored:
+        if score < min_score and max_score > min_score:
+            continue
         if card["id"] in seen:
             continue
         result.append(card)
@@ -107,9 +111,9 @@ async def curate_recipes(
     candidates: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], bool]:
     if not candidates:
-        return [], not bool(settings.xai_api_key)
+        return [], not bool(settings.xai_key)
 
-    if not settings.xai_api_key:
+    if not settings.xai_key:
         return mock_curate_recipes(what_sounds_good, parsed, candidates), True
 
     slim = [
