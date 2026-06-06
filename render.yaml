@@ -19,7 +19,7 @@ services:
       - key: USE_MOCK_DATA
         value: "true"
       - key: APP_VERSION
-        value: "20250606-alchemypantry"
+        value: "20250606-results25"
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./pantry_forge.db
       - key: JWT_SECRET

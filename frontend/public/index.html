@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-alchemypantry" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-results25" />
 </head>
 <body>
   <header class="site-header">
@@ -71,8 +71,8 @@
 
       <fieldset class="filter-fieldset filter-medical">
         <legend>Medical dietary needs</legend>
-        <p class="fieldset-hint">Heart health, diabetes, sodium, and other doctor-guided restrictions.</p>
-        <div id="health-condition-options" class="chip-grid"></div>
+        <p class="fieldset-hint">Tap to select — only applied when checked. None selected means no medical filter.</p>
+        <div id="health-condition-options" class="chip-grid chip-grid-medical" role="group" aria-label="Medical dietary needs"></div>
       </fieldset>
 
       <div class="toggle-row">
@@ -92,11 +92,13 @@
 
     <section id="results-panel" class="panel hidden">
       <div class="results-header">
-        <h2>Your options</h2>
+        <h2 id="results-heading">Your options</h2>
         <p id="results-message" class="hint"></p>
       </div>
       <div id="parsed-ingredients" class="parsed-chips hidden"></div>
-      <div id="results-list" class="results-list"></div>
+      <div id="results-scroll" class="results-scroll">
+        <div id="results-list" class="results-list"></div>
+      </div>
     </section>
 
     <section id="recipe-panel" class="panel hidden">
@@ -117,6 +119,6 @@
     <p id="build-tag" class="build-tag" aria-hidden="true"></p>
   </footer>
 
-  <script src="/static/app.js?v=20250606-alchemypantry"></script>
+  <script src="/static/app.js?v=20250606-results25"></script>
 </body>
 </html>

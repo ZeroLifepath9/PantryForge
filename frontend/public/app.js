@@ -56,26 +56,37 @@ function selectedHealthConditions() {
   );
 }
 
-function renderChipOptions(containerId, options, name) {
+function renderChipOptions(containerId, options, name, extraClass = "") {
   const wrap = $(containerId);
-  wrap.innerHTML = (options || [])
+  if (!wrap) return;
+  const chips = options || [];
+  if (!chips.length) {
+    wrap.innerHTML = `<p class="fieldset-hint">No options available.</p>`;
+    return;
+  }
+  wrap.innerHTML = chips
     .map(
       (d) =>
-        `<label class="chip"><input type="checkbox" name="${name}" value="${d.value}" />${d.label}</label>`
+        `<label class="chip chip-token ${extraClass}"><input type="checkbox" name="${name}" value="${d.value}" />${d.label}</label>`
     )
     .join("");
 }
 
 function renderDietOptions() {
-  renderChipOptions("diet-options", meta.diets, "diet");
+  renderChipOptions("diet-options", meta.diets, "diet", "chip-diet");
 }
 
 function renderIntoleranceOptions() {
-  renderChipOptions("intolerance-options", meta.intolerances, "intolerance");
+  renderChipOptions("intolerance-options", meta.intolerances, "intolerance", "chip-allergy");
 }
 
 function renderHealthConditionOptions() {
-  renderChipOptions("health-condition-options", meta.health_conditions, "health");
+  renderChipOptions(
+    "health-condition-options",
+    meta.health_conditions,
+    "health-condition",
+    "chip-medical"
+  );
 }
 
 function applyPreferences(prefs) {
@@ -147,6 +158,8 @@ function renderResults(data) {
   lastResults = data.results || [];
   $("results-panel").classList.remove("hidden");
   $("recipe-panel").classList.add("hidden");
+  const count = lastResults.length;
+  $("results-heading").textContent = count ? `Your options (${count})` : "Your options";
   $("results-message").textContent = data.message || "";
   const parsed = $("parsed-ingredients");
   if (data.effective_ingredients?.length) {
