@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-live-search" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-protein" />
 </head>
 <body>
   <header class="site-header">
@@ -48,7 +48,7 @@
 
     <section id="search-panel" class="panel panel-main hidden">
       <h2>What sounds good?</h2>
-      <p class="hint">Chicken and noodles, something crispy, a light salad on the side — say it however you like.</p>
+      <p class="hint">Name the protein that sounds good (chicken, salmon, beef). Mood and sides shape inspiration — search is protein-first.</p>
       <label class="field-grow">
         What sounds good?
         <textarea id="sounds-good-input" rows="3" maxlength="500" placeholder="e.g. chicken with noodles and something fresh on the side"></textarea>
@@ -89,12 +89,13 @@
 
       <div class="selection-bar">
         <p id="selection-count" class="hint">Select the recipes you want to make.</p>
-        <button type="button" id="inspired-btn" class="btn-primary" disabled>Continue with selection</button>
+        <button type="button" id="inspired-btn" class="btn-primary" disabled>Inspire my own creation</button>
       </div>
     </section>
 
     <section id="inspired-panel" class="panel hidden">
       <button type="button" id="back-to-results" class="btn-ghost">← Back to recipes</button>
+      <section id="creation-insight" class="creation-insight hidden"></section>
       <h2 id="inspired-title">Ingredients</h2>
       <p id="inspired-hint" class="hint">Check each ingredient you have. We'll suggest alternatives for anything you leave unchecked.</p>
       <div id="pantry-checklist" class="pantry-checklist"></div>
@@ -138,6 +139,6 @@
     <p id="build-tag" class="build-tag" aria-hidden="true"></p>
   </footer>
 
-  <script src="/static/app.js?v=20250606-live-search"></script>
+  <script src="/static/app.js?v=20250606-protein"></script>
 </body>
 </html>

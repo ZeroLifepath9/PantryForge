@@ -756,6 +756,42 @@ textarea { resize: vertical; min-height: 5rem; }
   margin-top: 0.35rem;
 }
 
+.creation-insight {
+  margin: 1rem 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f0f7f4 0%, #fff 100%);
+}
+
+.creation-insight h3 {
+  margin: 0 0 0.5rem;
+  font-family: Fraunces, Georgia, serif;
+}
+
+.creation-insight p {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+}
+
+.creation-mix-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.creation-mix-item {
+  padding: 0.65rem 0.75rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.creation-mix-item strong {
+  color: var(--green);
+}
+
 .pantry-checklist {
   display: grid;
   gap: 0.5rem;

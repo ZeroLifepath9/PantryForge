@@ -70,8 +70,14 @@ async def search_by_craving(
     recipes, curator_mock = await curate_recipes(what_sounds_good, parsed, candidates)
 
     live = use_live and not search_mock
+    protein = parsed.get("protein")
     if recipes:
-        if live:
+        if protein:
+            message = (
+                f"{len(recipes)} dishes featuring {protein} — mains, sides, and more "
+                "to scratch that craving."
+            )
+        elif live:
             message = f"Found {len(recipes)} recipes matching your craving."
         else:
             message = (

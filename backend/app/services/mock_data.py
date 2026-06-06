@@ -805,8 +805,19 @@ def mock_craving_search(
     mains_pool.sort(key=lambda x: x[1], reverse=True)
     mains = [_mock_card(r, "main") for r, _ in mains_pool[:5]]
 
+    protein = (parsed.get("protein") or "").lower()
     pair_pool = [(r, s) for c, r, s in candidates if c in ("side", "salad", "dip") and s > 0]
-    pair_pool.sort(key=lambda x: x[1], reverse=True)
+    if protein:
+        # Prefer sides that also mention the protein when available
+        pair_pool.sort(
+            key=lambda x: (
+                1 if protein in _craving_blob(x[0]) else 0,
+                x[1],
+            ),
+            reverse=True,
+        )
+    else:
+        pair_pool.sort(key=lambda x: x[1], reverse=True)
     pairings: list[dict[str, Any]] = []
     seen_ids = {m["id"] for m in mains}
     for r, _ in pair_pool:

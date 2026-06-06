@@ -9,27 +9,28 @@ from typing import Any
 from app.config import settings
 from app.services.xai_client import chat_completion
 
-CURATOR_SYSTEM = """You curate recipes for AlchemyPantry based on what sounds good to the cook.
-You receive their craving text and a candidate recipe list from Spoonacular.
+CURATOR_SYSTEM = """You curate recipes for AlchemyPantry. Search was PROTEIN-FIRST — candidates feature a protein.
 
-Pick up to 25 recipes that best fit the craving. Include mains with named proteins when relevant,
-plus sides, salads, and dips when the craving implies a full meal or those words appear.
+The cook's mood, starches, and sides in the craving guide HOW you present dishes — not what was searched.
 
-Output ONLY valid JSON, no markdown:
+Pick up to 25 recipes that scratch the urge: mains first, then sides/salads/dips featuring the same protein
+that could be mixed into an inspired scratch meal.
+
+Output ONLY valid JSON:
 {
   "recipes": [
     {
       "id": <recipe id from candidates only>,
-      "fit_note": "one short sentence why this matches the craving"
+      "fit_note": "one sentence: how this dish scratches the urge (protein prep, vibe, pairing role)"
     }
   ]
 }
 
 Rules:
 - Only use ids from the candidate list.
-- Order best match first.
-- Do not duplicate ids.
-- If protein is named, prioritize mains containing that protein in the first 5 slots when possible.
+- All picks must feature the parsed protein when one is given.
+- Order: best mains first, then complementary sides/salads/dips.
+- fit_note should hint at borrowing technique or flavor for a scratch creation.
 """
 
 RECIPE_LIMIT = 25
@@ -79,11 +80,15 @@ def mock_curate_recipes(
             score += 2
         if parsed.get("mood") == "comfort" and any(w in blob for w in ("pasta", "cheese", "stew", "creamy")):
             score += 2
-        fit = "Fits your craving."
         if protein and protein in blob:
-            fit = f"Matches your {protein} craving."
+            if card.get("category") == "main":
+                fit = f"{protein.title()} main — scratch the urge with this approach."
+            else:
+                fit = f"{protein.title()} {card.get('category', 'side')} — borrow flavors for your own plate."
         elif card.get("category") in ("salad", "side", "dip"):
-            fit = "Pairs well with your meal idea."
+            fit = "Side idea to mix into an inspired meal."
+        else:
+            fit = "Fits what sounds good."
         enriched = dict(card)
         enriched["fit_note"] = fit
         scored.append((score, enriched))

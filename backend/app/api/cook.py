@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.schemas import (
     ApprovedSubstitution,
+    CreationInsight,
     InspiredCookRequest,
     InspiredCookResponse,
     InspiredIngredientItem,
@@ -9,6 +10,7 @@ from app.schemas import (
     InspiredSetupResponse,
     InspiredSubstitutionsRequest,
     InspiredSubstitutionsResponse,
+    MixElement,
     SimplifiedStep,
     SubstitutionItem,
 )
@@ -27,14 +29,18 @@ async def inspired_setup_endpoint(body: InspiredSetupRequest):
         result, is_mock = await inspired_setup(
             body.recipe_ids,
             what_sounds_good=body.what_sounds_good,
+            protein=body.protein,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    insight_raw = result.get("creation_insight")
+    insight = CreationInsight(**insight_raw) if insight_raw else None
     return InspiredSetupResponse(
         meal_title=result["meal_title"],
         ingredients=[InspiredIngredientItem(**i) for i in result["ingredients"]],
         recipe_titles=result.get("recipe_titles") or [],
-        mock=is_mock,
+        creation_insight=insight,
+        mock=is_mock or bool(result.get("mock")),
     )
 
 

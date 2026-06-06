@@ -191,6 +191,7 @@ class AdvisorInsightsResponse(BaseModel):
 
 class CravingParsed(BaseModel):
     protein: str | None = None
+    protein_query: str | None = None
     starches: list[str] = []
     flavors: list[str] = []
     cuisine: str | None = None
@@ -238,15 +239,31 @@ class InspiredIngredientItem(BaseModel):
     recipe_title: str
 
 
+class MixElement(BaseModel):
+    from_recipe: str
+    borrow: str
+    use_it: str
+
+
+class CreationInsight(BaseModel):
+    headline: str
+    urge_summary: str
+    fusion_idea: str
+    mix_elements: list[MixElement] = []
+    scratch_meal: str
+
+
 class InspiredSetupRequest(BaseModel):
     recipe_ids: list[int] = Field(min_length=1)
     what_sounds_good: str | None = Field(default=None, max_length=500)
+    protein: str | None = Field(default=None, max_length=80)
 
 
 class InspiredSetupResponse(BaseModel):
     meal_title: str
     ingredients: list[InspiredIngredientItem]
     recipe_titles: list[str] = []
+    creation_insight: CreationInsight | None = None
     mock: bool = False
 
 

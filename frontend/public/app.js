@@ -225,10 +225,13 @@ function renderParsedCraving(parsed) {
     return;
   }
   const chips = [];
-  if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
-  if (parsed.starches?.length) chips.push(`Starches: ${parsed.starches.join(", ")}`);
+  if (parsed.protein) {
+    chips.push(`Searching: ${parsed.protein} dishes`);
+  } else if (parsed.main_query) {
+    chips.push(`Searching: ${parsed.main_query}`);
+  }
   if (parsed.mood) chips.push(`Mood: ${parsed.mood}`);
-  if (parsed.main_query) chips.push(`Searching: ${parsed.main_query}`);
+  if (parsed.starches?.length) chips.push(`Vibe: ${parsed.starches.join(", ")}`);
   if (!chips.length) {
     el.classList.add("hidden");
     return;
@@ -247,9 +250,9 @@ function renderCravingResults(data) {
   const recipes = normalizeRecipes(data);
   const total = recipes.length;
   $("results-heading").textContent = total ? `Recipes for you (${total})` : "Recipes for you";
-  $("results-message").textContent = total
-    ? `Grok picked ${total} recipe${total === 1 ? "" : "s"} that fit what sounds good.`
-    : data.message || "No matches yet.";
+  $("results-message").textContent = data.message || (total
+    ? `${total} recipe${total === 1 ? "" : "s"} to inspire your own creation.`
+    : "No matches yet.");
   renderParsedCraving(data.parsed);
 
   let list = $("recipes-list");
@@ -304,15 +307,40 @@ async function runSearch() {
   }
 }
 
+function renderCreationInsight(insight) {
+  const block = $("creation-insight");
+  if (!insight || !block) {
+    block?.classList.add("hidden");
+    return;
+  }
+  block.classList.remove("hidden");
+  const mix = (insight.mix_elements || [])
+    .map(
+      (m) => `
+      <div class="creation-mix-item">
+        <strong>${escapeHtml(m.from_recipe)}</strong> — borrow ${escapeHtml(m.borrow)}.
+        ${escapeHtml(m.use_it)}
+      </div>`
+    )
+    .join("");
+  block.innerHTML = `
+    <h3>${escapeHtml(insight.headline)}</h3>
+    <p>${escapeHtml(insight.urge_summary)}</p>
+    <p>${escapeHtml(insight.fusion_idea)}</p>
+    ${mix ? `<div class="creation-mix-list">${mix}</div>` : ""}
+    <p><strong>Scratch meal:</strong> ${escapeHtml(insight.scratch_meal)}</p>`;
+}
+
 async function openInspiredPanel() {
   if (!selectedIds.size) return;
-  setStatus($("inspired-status"), "Loading ingredients…");
+  setStatus($("inspired-status"), "Building your inspired mix…");
   $("results-panel").classList.add("hidden");
   $("inspired-panel").classList.remove("hidden");
   $("substitutions-block").classList.add("hidden");
   $("start-cook-btn").disabled = true;
   approvedSubs = [];
   pendingSubstitutions = [];
+  renderCreationInsight(null);
 
   try {
     const data = await api("/cook/inspired/setup", {
@@ -320,10 +348,12 @@ async function openInspiredPanel() {
       body: JSON.stringify({
         recipe_ids: [...selectedIds],
         what_sounds_good: soundsGoodText() || null,
+        protein: lastCraving?.parsed?.protein || null,
       }),
     });
     inspiredSetup = data;
-    $("inspired-title").textContent = data.meal_title;
+    $("inspired-title").textContent = "Ingredients for your mix";
+    renderCreationInsight(data.creation_insight);
     const list = $("pantry-checklist");
     list.innerHTML = (data.ingredients || [])
       .map(

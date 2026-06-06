@@ -86,6 +86,7 @@ async def inspired_setup(
     recipe_ids: list[int],
     *,
     what_sounds_good: str | None = None,
+    protein: str | None = None,
 ) -> tuple[dict[str, Any], bool]:
     recipes = await load_recipes(recipe_ids)
     if not recipes:
@@ -114,11 +115,20 @@ async def inspired_setup(
     if what_sounds_good:
         meal_title = f"{meal_title} ({what_sounds_good[:40]})"
 
+    from app.services.creation_insight import generate_creation_insight
+
+    insight, insight_mock = await generate_creation_insight(
+        recipe_ids,
+        what_sounds_good=what_sounds_good,
+        protein=protein,
+    )
+
     return {
         "meal_title": meal_title,
         "ingredients": ingredients,
         "recipe_titles": titles,
-    }, False
+        "creation_insight": insight,
+    }, insight_mock
 
 
 def _mock_substitutions(

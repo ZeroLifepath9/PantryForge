@@ -439,6 +439,11 @@ async def complex_search(
     return results
 
 
+def _mentions_protein(card: dict[str, Any], protein: str) -> bool:
+    blob = _normalize(f"{card.get('title') or ''} {card.get('summary') or ''}")
+    return protein in blob
+
+
 async def search_by_craving(
     parsed: dict[str, Any],
     *,
@@ -447,72 +452,75 @@ async def search_by_craving(
 ) -> dict[str, Any]:
     diets = diets or []
     intolerances = intolerances or []
-    main_query = parsed.get("main_query") or "dinner"
-    protein = parsed.get("protein")
+    protein = (parsed.get("protein") or "").strip().lower()
+    search_anchor = protein or (parsed.get("protein_query") or parsed.get("main_query") or "dinner")
 
-    mains_raw = await complex_search(
-        query=main_query,
-        number=12,
-        diets=diets,
-        intolerances=intolerances,
-        dish_type="main course",
-    )
+    # Protein-first: every Spoonacular query leads with the protein, not noodles/mood/etc.
+    search_plan: list[tuple[str, str | None, str, int]] = []
+    if protein:
+        search_plan = [
+            (protein, "main course", "main", 10),
+            (protein, None, "side", 8),
+            (protein, None, "salad", 8),
+            (protein, None, "dip", 6),
+        ]
+    else:
+        search_plan = [
+            (search_anchor, "main course", "main", 10),
+            (search_anchor, None, "side", 6),
+            (search_anchor, None, "salad", 6),
+        ]
 
     mains: list[dict[str, Any]] = []
-    seen: set[int] = set()
-    for card in mains_raw:
-        if card["id"] in seen:
-            continue
-        title_norm = _normalize(card["title"])
-        if protein and protein not in title_norm and protein not in _normalize(card.get("summary") or ""):
-            continue
-        card["category"] = "main"
-        mains.append(card)
-        seen.add(card["id"])
-        if len(mains) >= 5:
-            break
-
-    if len(mains) < 5 and not protein:
-        for card in mains_raw:
-            if card["id"] in seen:
-                continue
-            card["category"] = "main"
-            mains.append(card)
-            seen.add(card["id"])
-            if len(mains) >= 5:
-                break
-
     pairings: list[dict[str, Any]] = []
-    pairing_queries = parsed.get("pairing_queries") or ["side salad", "vegetable side"]
-    for pq in pairing_queries:
-        if len(pairings) >= 20:
-            break
+    seen: set[int] = set()
+
+    for query, dish_type, target_cat, number in search_plan:
         batch = await complex_search(
-            query=pq,
-            number=8,
+            query=query,
+            number=number,
             diets=diets,
             intolerances=intolerances,
+            dish_type=dish_type,
         )
         for card in batch:
             if card["id"] in seen:
                 continue
-            if card["category"] == "main":
-                card["category"] = "side"
-            if card["category"] not in ("side", "salad", "dip"):
-                card["category"] = "side"
-            pairings.append(card)
+            if protein and not _mentions_protein(card, protein):
+                continue
+
+            cat = card.get("category") or target_cat
+            if target_cat == "main":
+                cat = "main"
+            elif target_cat in ("side", "salad", "dip"):
+                cat = target_cat if cat in ("side", "salad", "dip") else target_cat
+            else:
+                cat = target_cat
+
+            card = dict(card)
+            card["category"] = cat
             seen.add(card["id"])
-            if len(pairings) >= 20:
-                break
+
+            if cat == "main" and len(mains) < 8:
+                mains.append(card)
+            elif cat != "main" and len(pairings) < 20:
+                pairings.append(card)
 
     message = None
-    if not mains:
-        message = "No main courses matched — try rephrasing what sounds good or loosen diet filters."
-    elif mains and not pairings:
-        message = "Found mains; add pairing ideas by mentioning sides or salads in your craving."
+    if protein:
+        total = len(mains) + len(pairings)
+        if total:
+            message = (
+                f"Dishes featuring {protein} — mains, sides, and more to scratch that craving."
+            )
+        else:
+            message = f"No recipes found for {protein}. Try another protein or loosen diet filters."
+    elif not mains and not pairings:
+        message = "No matches — name a protein in what sounds good (chicken, salmon, beef…)."
 
     return {
-        "mains": mains[:5],
+        "mains": mains[:8],
         "pairings": pairings[:20],
         "message": message,
+        "protein_search": protein or search_anchor,
     }

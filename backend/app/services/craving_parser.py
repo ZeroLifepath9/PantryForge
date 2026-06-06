@@ -9,25 +9,26 @@ from typing import Any
 from app.config import settings
 from app.services.xai_client import chat_completion
 
-PARSER_SYSTEM = """You parse what a home cook says sounds good into structured search terms.
-Output ONLY valid JSON, no markdown, matching:
+PARSER_SYSTEM = """You parse what a home cook says sounds good. The PROTEIN drives recipe search.
+
+Output ONLY valid JSON, no markdown:
 {
   "protein": "chicken|beef|pork|fish|shrimp|tofu|egg|turkey|lamb|null",
-  "starches": ["noodles", "potato", "rice", ...],
+  "protein_query": "single protein word for API search, same as protein or null",
+  "starches": ["noodles", "potato", ...],
   "flavors": ["garlic", "lemon", ...],
   "cuisine": "italian|mexican|asian|null",
   "mood": "light|comfort|crispy|fresh|hearty|null",
-  "main_query": "short Spoonacular search phrase for main course with protein if any",
-  "pairing_queries": ["side salad", "garlic dip", ...],
-  "search_terms": ["all", "normalized", "terms"]
+  "main_query": "fallback only when no protein — 2-4 words",
+  "pairing_queries": [],
+  "search_terms": ["concrete", "food", "words"]
 }
 
 Rules:
-- Extract explicit proteins (chicken, beef, salmon, etc.) even if phrased casually.
-- Extract starches/carbs: noodles, pasta, potatoes, rice, bread, etc.
-- main_query should be 2-5 words ideal for recipe API search.
-- pairing_queries: 2-4 short queries for sides, salads, dips that pair with the main_query.
-- search_terms: deduplicated list of concrete food words from the request.
+- protein is the primary search key. Extract it even if casual ("some chicken", "salmon sounds nice").
+- protein_query must be ONLY the protein name (e.g. "chicken") — never combine with noodles, mood, or sides.
+- starches, mood, flavors are for curator/insight only — NOT for API search queries.
+- pairing_queries: leave empty (search uses protein only).
 """
 
 PROTEINS = (
@@ -76,16 +77,13 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
     else:
         mood = str(mood).lower().strip()
 
+    protein_query = str(raw.get("protein_query") or protein or "").strip().lower() or None
+
     main_query = str(raw.get("main_query") or "").strip()
     if not main_query:
-        parts = [p for p in [protein, *starches[:2], mood] if p]
-        main_query = " ".join(parts) or original.strip()[:80]
+        main_query = protein_query or original.strip()[:60]
 
-    pairing_queries = [
-        str(q).strip() for q in (raw.get("pairing_queries") or []) if q
-    ]
-    if not pairing_queries:
-        pairing_queries = ["side salad", "roasted vegetables", "dip"]
+    pairing_queries: list[str] = []
 
     if protein and protein not in search_terms:
         search_terms.insert(0, protein)
@@ -95,12 +93,13 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
 
     return {
         "protein": protein,
+        "protein_query": protein_query,
         "starches": starches,
         "flavors": flavors,
         "cuisine": cuisine,
         "mood": mood,
         "main_query": main_query,
-        "pairing_queries": pairing_queries[:4],
+        "pairing_queries": pairing_queries,
         "search_terms": list(dict.fromkeys(search_terms)),
     }
 
@@ -123,14 +122,9 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
             cuisine = c
             break
 
-    parts = [p for p in [protein, *starches[:2], mood] if p]
-    main_query = " ".join(parts) if parts else text.strip()[:60]
-
-    pairing_queries = []
-    if protein:
-        pairing_queries.append(f"{protein} side dish")
-    pairing_queries.extend(["fresh salad", "vegetable side", "dip sauce"])
-    pairing_queries = list(dict.fromkeys(pairing_queries))[:4]
+    protein_query = protein
+    main_query = protein or text.strip()[:60]
+    pairing_queries: list[str] = []
 
     search_terms = list(dict.fromkeys(
         ([protein] if protein else [])
@@ -141,6 +135,7 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
 
     return {
         "protein": protein,
+        "protein_query": protein_query,
         "starches": starches,
         "flavors": flavors,
         "cuisine": cuisine,
