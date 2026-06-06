@@ -370,6 +370,66 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "instructions": ["Warm beans with cumin.", "Fill tortillas with beans and tomato.", "Squeeze lime, add cilantro."],
     },
     {
+        "id": 1023,
+        "title": "Chicken Fajitas",
+        "image": "https://images.unsplash.com/photo-1599974579688-8dbddb6f6d8c?w=400",
+        "summary": "Sizzling chicken fajitas with peppers and onions.",
+        "ready_in_minutes": 25,
+        "servings": 4,
+        "diets": ["gluten-free", "dairy-free"],
+        "intolerance_conflicts": [],
+        "health_friendly": ["cardiac", "diabetes", "anti-inflammatory"],
+        "required": ["chicken", "bell pepper", "onion", "lime", "cumin", "tortilla", "garlic"],
+        "source_url": "https://example.com/chicken-fajitas",
+        "video_url": None,
+        "instructions": ["Sear seasoned chicken strips.", "Cook peppers and onions.", "Serve in warm tortillas with lime."],
+    },
+    {
+        "id": 1024,
+        "title": "Beef Burrito Bowl",
+        "image": "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400",
+        "summary": "Burrito bowl with seasoned ground beef, rice, and salsa.",
+        "ready_in_minutes": 30,
+        "servings": 3,
+        "diets": ["gluten-free", "dairy-free"],
+        "intolerance_conflicts": [],
+        "health_friendly": ["anti-inflammatory"],
+        "required": ["beef", "rice", "beans", "tomato", "onion", "cumin", "lime", "cilantro"],
+        "source_url": "https://example.com/beef-burrito-bowl",
+        "video_url": None,
+        "instructions": ["Brown beef with spices.", "Layer rice, beef, beans, and salsa.", "Top with cilantro and lime."],
+    },
+    {
+        "id": 1025,
+        "title": "Shrimp Tacos with Slaw",
+        "image": "https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=400",
+        "summary": "Crispy shrimp tacos with cabbage slaw and lime crema.",
+        "ready_in_minutes": 20,
+        "servings": 2,
+        "diets": ["pescetarian"],
+        "intolerance_conflicts": ["seafood", "dairy", "gluten", "grain"],
+        "health_friendly": ["cardiac", "low-cholesterol"],
+        "required": ["shrimp", "tortilla", "cabbage", "lime", "yogurt", "cilantro"],
+        "source_url": "https://example.com/shrimp-tacos",
+        "video_url": None,
+        "instructions": ["Sear shrimp.", "Toss slaw with lime.", "Fill tortillas and drizzle crema."],
+    },
+    {
+        "id": 1026,
+        "title": "Cheese Quesadilla",
+        "image": "https://images.unsplash.com/photo-1618040996337-56904b7850b9?w=400",
+        "summary": "Crispy quesadilla with melted cheese and mild salsa.",
+        "ready_in_minutes": 12,
+        "servings": 2,
+        "diets": ["vegetarian"],
+        "intolerance_conflicts": ["dairy", "gluten", "grain"],
+        "health_friendly": [],
+        "required": ["tortilla", "cheese", "tomato", "onion", "cumin"],
+        "source_url": "https://example.com/cheese-quesadilla",
+        "video_url": None,
+        "instructions": ["Fill tortilla with cheese.", "Pan-fry until golden.", "Serve with salsa."],
+    },
+    {
         "id": 1021,
         "title": "Cucumber Tomato Salad",
         "image": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400",
@@ -730,8 +790,12 @@ def _score_mock_recipe(
     parsed: dict[str, Any],
     what_sounds_good: str,
 ) -> int:
+    from app.services.dish_families import dish_keywords, matches_dish_family
+
     blob = _craving_blob(recipe)
     protein = (parsed.get("protein") or "").lower()
+    search_mode = (parsed.get("search_mode") or "general").lower()
+    dish_anchor = parsed.get("dish_anchor")
     starches = [s.lower() for s in parsed.get("starches") or []]
     terms = set(parsed.get("search_terms") or [])
     query_words = [
@@ -739,11 +803,23 @@ def _score_mock_recipe(
         if w not in _STOPWORDS
     ]
 
-    if protein and category == "main":
+    card = {"title": recipe.get("title"), "summary": recipe.get("summary")}
+    if search_mode == "dish" and dish_anchor and category == "main":
+        if not matches_dish_family(card, dish_anchor):
+            return -1
+        if protein and protein not in blob:
+            return -1
+    elif protein and category == "main":
         if protein not in blob:
             return -1
 
     score = 0
+    if search_mode == "dish" and dish_anchor:
+        if matches_dish_family(card, dish_anchor):
+            score += 25
+        for kw in dish_keywords(dish_anchor):
+            if kw in blob:
+                score += 8
     if protein and protein in blob:
         score += 20
     for s in starches:
@@ -763,7 +839,7 @@ def _score_mock_recipe(
     if mood == "comfort" and any(w in blob for w in ("pasta", "cheese", "stew", "creamy", "rice")):
         score += 3
 
-    if category == "main" and score == 0 and (protein or starches or query_words):
+    if category == "main" and score == 0 and (protein or starches or query_words or dish_anchor):
         return -1
     return score
 
@@ -830,7 +906,11 @@ def mock_craving_search(
 
     message = None
     if not mains and not pairings:
-        message = "No demo recipes matched that craving — try chicken, salmon, pasta, or eggs."
+        anchor = parsed.get("dish_anchor")
+        if anchor:
+            message = f"No demo {anchor.replace('_', ' ')} recipes matched — add API keys for live search."
+        else:
+            message = "No demo recipes matched that craving — try tacos, chicken, pasta, or salmon."
 
     return {"mains": mains, "pairings": pairings, "message": message}
 

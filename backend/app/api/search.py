@@ -48,6 +48,7 @@ async def parse_ingredients_endpoint(body: ParseIngredientsRequest):
 async def search_craving_endpoint(body: CravingSearchRequest):
     payload, is_mock = await search_by_craving(
         body.what_sounds_good,
+        protein_filter=body.protein_filter,
         diets=body.diets,
         intolerances=body.intolerances,
         health_conditions=body.health_conditions,

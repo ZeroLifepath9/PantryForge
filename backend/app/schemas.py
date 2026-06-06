@@ -190,6 +190,9 @@ class AdvisorInsightsResponse(BaseModel):
 
 
 class CravingParsed(BaseModel):
+    search_mode: str = "general"
+    dish_anchor: str | None = None
+    dish_queries: list[str] = []
     protein: str | None = None
     protein_query: str | None = None
     starches: list[str] = []
@@ -199,6 +202,8 @@ class CravingParsed(BaseModel):
     main_query: str = ""
     pairing_queries: list[str] = []
     search_terms: list[str] = []
+    needs_protein_prompt: bool = False
+    protein_options: list[str] = []
 
 
 class MealRecipeCard(BaseModel):
@@ -216,6 +221,7 @@ class MealRecipeCard(BaseModel):
 
 class CravingSearchRequest(BaseModel):
     what_sounds_good: str = Field(min_length=1, max_length=500)
+    protein_filter: str | None = Field(default=None, max_length=80)
     diets: list[str] = []
     intolerances: list[str] = []
     health_conditions: list[str] = []

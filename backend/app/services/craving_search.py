@@ -6,7 +6,7 @@ from typing import Any
 
 from app.config import settings
 from app.services import mock_data
-from app.services.craving_parser import parse_craving
+from app.services.craving_parser import apply_protein_filter, parse_craving
 from app.services.recipe_curator import curate_recipes
 
 
@@ -24,11 +24,14 @@ def _merge_candidates(mains: list, pairings: list) -> list:
 async def search_by_craving(
     what_sounds_good: str,
     *,
+    protein_filter: str | None = None,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
     health_conditions: list[str] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     parsed, parse_mock = await parse_craving(what_sounds_good)
+    if protein_filter is not None:
+        parsed = apply_protein_filter(parsed, protein_filter or None)
     diets = diets or []
     intolerances = intolerances or []
     health_conditions = health_conditions or []
@@ -71,8 +74,23 @@ async def search_by_craving(
 
     live = use_live and not search_mock
     protein = parsed.get("protein")
+    search_mode = parsed.get("search_mode")
+    dish_anchor = parsed.get("dish_anchor")
     if recipes:
-        if protein:
+        if search_mode == "dish" and dish_anchor:
+            family = dish_anchor.replace("_", " ")
+            if protein:
+                message = (
+                    f"{len(recipes)} {family} dishes with {protein} — "
+                    "tacos, burritos, fajitas & more."
+                    if dish_anchor == "taco"
+                    else f"{len(recipes)} {family} dishes with {protein}."
+                )
+            elif parsed.get("needs_protein_prompt"):
+                message = message or (
+                    f"{len(recipes)} {family} recipes — pick a protein to narrow down."
+                )
+        elif protein:
             message = (
                 f"{len(recipes)} dishes featuring {protein} — mains, sides, and more "
                 "to scratch that craving."

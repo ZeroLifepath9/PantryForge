@@ -7,29 +7,34 @@ import re
 from typing import Any
 
 from app.config import settings
+from app.services.dish_families import dish_keywords, matches_dish_family
 from app.services.xai_client import chat_completion
 
-CURATOR_SYSTEM = """You curate recipes for AlchemyPantry. Search was PROTEIN-FIRST — candidates feature a protein.
+CURATOR_SYSTEM = """You curate recipes for AlchemyPantry.
 
-The cook's mood, starches, and sides in the craving guide HOW you present dishes — not what was searched.
+Search mode guides what to pick:
+- DISH mode (search_mode=dish): Keep taco-style / pasta / pizza family dishes AND adjacent types
+  (e.g. tacos + burritos + fajitas + quesadillas). Do NOT drop adjacents just because the title
+  says burrito instead of taco. If a protein filter is set, every pick must feature that protein.
+- PROTEIN mode: Candidates feature a protein — pick mains first, then complementary sides.
+- GENERAL: Best match to the craving text.
 
-Pick up to 25 recipes that scratch the urge: mains first, then sides/salads/dips featuring the same protein
-that could be mixed into an inspired scratch meal.
+Mood, starches, and cuisine guide ordering and fit notes — not whether a dish belongs.
 
 Output ONLY valid JSON:
 {
   "recipes": [
     {
       "id": <recipe id from candidates only>,
-      "fit_note": "one sentence: how this dish scratches the urge (protein prep, vibe, pairing role)"
+      "fit_note": "one sentence: how this dish scratches the urge"
     }
   ]
 }
 
 Rules:
 - Only use ids from the candidate list.
-- All picks must feature the parsed protein when one is given.
-- Order: best mains first, then complementary sides/salads/dips.
+- DISH mode: include diverse adjacents from dish_queries; mains first.
+- When protein is set, all picks must feature that protein.
 - fit_note should hint at borrowing technique or flavor for a scratch creation.
 """
 
@@ -57,6 +62,10 @@ def mock_curate_recipes(
         return []
 
     protein = (parsed.get("protein") or "").lower()
+    search_mode = (parsed.get("search_mode") or "general").lower()
+    dish_anchor = parsed.get("dish_anchor")
+    dish_queries = [q.lower() for q in (parsed.get("dish_queries") or [])]
+    dish_kws = set(dish_keywords(dish_anchor))
     terms = set(parsed.get("search_terms") or [])
     if protein:
         terms.add(protein)
@@ -71,6 +80,17 @@ def mock_curate_recipes(
         score = 0
         if card.get("category") == "main":
             score += 2
+        if search_mode == "dish" and dish_anchor:
+            if matches_dish_family(card, dish_anchor):
+                score += 12
+            for dq in dish_queries:
+                if dq in blob:
+                    score += 6
+            for kw in dish_kws:
+                if kw in blob:
+                    score += 4
+            if protein and protein not in blob:
+                score -= 20
         if protein and protein in blob:
             score += 8
         for t in terms:
@@ -80,7 +100,9 @@ def mock_curate_recipes(
             score += 2
         if parsed.get("mood") == "comfort" and any(w in blob for w in ("pasta", "cheese", "stew", "creamy")):
             score += 2
-        if protein and protein in blob:
+        if search_mode == "dish" and dish_anchor and matches_dish_family(card, dish_anchor):
+            fit = f"{dish_anchor.replace('_', ' ').title()} vibe — borrow this approach for your plate."
+        elif protein and protein in blob:
             if card.get("category") == "main":
                 fit = f"{protein.title()} main — scratch the urge with this approach."
             else:
@@ -95,7 +117,10 @@ def mock_curate_recipes(
 
     scored.sort(key=lambda x: x[0], reverse=True)
     max_score = scored[0][0] if scored else 0
-    min_score = 4 if protein else 1
+    if search_mode == "dish":
+        min_score = 6 if dish_anchor else 1
+    else:
+        min_score = 4 if protein else 1
     seen: set[int] = set()
     result: list[dict[str, Any]] = []
     for score, card in scored:

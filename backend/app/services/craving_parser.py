@@ -7,28 +7,40 @@ import re
 from typing import Any
 
 from app.config import settings
+from app.services.dish_families import (
+    PROTEIN_OPTIONS,
+    detect_dish_anchor,
+    dish_keywords,
+)
 from app.services.xai_client import chat_completion
 
-PARSER_SYSTEM = """You parse what a home cook says sounds good. The PROTEIN drives recipe search.
+PARSER_SYSTEM = """You parse what a home cook says sounds good for recipe search.
 
-Output ONLY valid JSON, no markdown:
+Output ONLY valid JSON:
 {
-  "protein": "chicken|beef|pork|fish|shrimp|tofu|egg|turkey|lamb|null",
-  "protein_query": "single protein word for API search, same as protein or null",
-  "starches": ["noodles", "potato", ...],
-  "flavors": ["garlic", "lemon", ...],
-  "cuisine": "italian|mexican|asian|null",
-  "mood": "light|comfort|crispy|fresh|hearty|null",
-  "main_query": "fallback only when no protein — 2-4 words",
-  "pairing_queries": [],
-  "search_terms": ["concrete", "food", "words"]
+  "search_mode": "dish|protein|general",
+  "dish_anchor": "taco|pasta|pizza|burger|curry|stir_fry|soup|salad|null",
+  "dish_queries": ["taco", "burrito", "fajita", ...],
+  "protein": "chicken|beef|...|null",
+  "protein_query": "protein word only or null",
+  "starches": [],
+  "flavors": [],
+  "cuisine": "mexican|italian|null",
+  "mood": "light|comfort|null",
+  "main_query": "fallback 2-4 words",
+  "search_terms": []
 }
 
-Rules:
-- protein is the primary search key. Extract it even if casual ("some chicken", "salmon sounds nice").
-- protein_query must be ONLY the protein name (e.g. "chicken") — never combine with noodles, mood, or sides.
-- starches, mood, flavors are for curator/insight only — NOT for API search queries.
-- pairing_queries: leave empty (search uses protein only).
+RULES (priority order):
+1. DISH MODE: If they name a dish (tacos, pasta, pizza, burgers, curry, stir fry, soup, salad),
+   set search_mode=dish, dish_anchor, and dish_queries INCLUDING adjacents:
+   - tacos → taco, burrito, fajita, quesadilla, enchilada
+   - pasta → pasta, spaghetti, lasagna, ravioli
+   - pizza → pizza, calzone
+2. PROTEIN MODE: If they name a protein WITHOUT a dish anchor, search_mode=protein.
+3. GENERAL: Otherwise search_mode=general with main_query from craving.
+4. protein_query is ONLY the protein word — never combine with dish names.
+5. If dish mode and no protein mentioned, protein=null (UI will ask).
 """
 
 PROTEINS = (
@@ -48,10 +60,22 @@ MOODS = {
 
 def _extract_json(text: str) -> dict[str, Any]:
     cleaned = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
+    fence = re.search(r"```(?:?:json)?\s*([\s\S]*?)```", cleaned)
     if fence:
         cleaned = fence.group(1).strip()
     return json.loads(cleaned)
+
+
+def _apply_dish_detection(parsed: dict[str, Any], original: str) -> dict[str, Any]:
+    anchor, queries = detect_dish_anchor(original)
+    if anchor:
+        parsed["search_mode"] = "dish"
+        parsed["dish_anchor"] = anchor
+        parsed["dish_queries"] = queries
+        if not parsed.get("cuisine"):
+            from app.services.dish_families import cuisine_for_anchor
+            parsed["cuisine"] = cuisine_for_anchor(anchor)
+    return parsed
 
 
 def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
@@ -60,6 +84,15 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         protein = None
     else:
         protein = str(protein).lower().strip()
+
+    search_mode = str(raw.get("search_mode") or "general").lower()
+    dish_anchor = raw.get("dish_anchor")
+    if dish_anchor in (None, "null", ""):
+        dish_anchor = None
+    else:
+        dish_anchor = str(dish_anchor).lower().strip()
+
+    dish_queries = [str(q).strip() for q in (raw.get("dish_queries") or []) if q]
 
     starches = [str(s).lower().strip() for s in (raw.get("starches") or []) if s]
     flavors = [str(f).lower().strip() for f in (raw.get("flavors") or []) if f]
@@ -78,20 +111,14 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         mood = str(mood).lower().strip()
 
     protein_query = str(raw.get("protein_query") or protein or "").strip().lower() or None
-
     main_query = str(raw.get("main_query") or "").strip()
     if not main_query:
-        main_query = protein_query or original.strip()[:60]
+        main_query = original.strip()[:60]
 
-    pairing_queries: list[str] = []
-
-    if protein and protein not in search_terms:
-        search_terms.insert(0, protein)
-    for s in starches:
-        if s not in search_terms:
-            search_terms.append(s)
-
-    return {
+    result = {
+        "search_mode": search_mode,
+        "dish_anchor": dish_anchor,
+        "dish_queries": dish_queries,
         "protein": protein,
         "protein_query": protein_query,
         "starches": starches,
@@ -99,9 +126,29 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         "cuisine": cuisine,
         "mood": mood,
         "main_query": main_query,
-        "pairing_queries": pairing_queries,
+        "pairing_queries": [],
         "search_terms": list(dict.fromkeys(search_terms)),
+        "needs_protein_prompt": False,
+        "protein_options": PROTEIN_OPTIONS,
     }
+
+    result = _apply_dish_detection(result, original)
+    if result["search_mode"] == "dish" or result["dish_anchor"]:
+        result["search_mode"] = "dish"
+        if not result["dish_queries"] and result["dish_anchor"]:
+            _, result["dish_queries"] = detect_dish_anchor(original)
+    elif protein:
+        result["search_mode"] = "protein"
+    else:
+        result["search_mode"] = search_mode if search_mode in ("protein", "dish", "general") else "general"
+
+    if result["search_mode"] == "dish" and not result["protein"]:
+        result["needs_protein_prompt"] = True
+
+    if protein and protein not in result["search_terms"]:
+        result["search_terms"].insert(0, protein)
+
+    return result
 
 
 def mock_parse_craving(text: str) -> dict[str, Any]:
@@ -122,28 +169,34 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
             cuisine = c
             break
 
-    protein_query = protein
-    main_query = protein or text.strip()[:60]
-    pairing_queries: list[str] = []
+    dish_anchor, dish_queries = detect_dish_anchor(text)
+    search_mode = "dish" if dish_anchor else ("protein" if protein else "general")
 
     search_terms = list(dict.fromkeys(
         ([protein] if protein else [])
         + starches
         + flavors
-        + [w for w in re.findall(r"[a-z]{3,}", lower) if w not in ("something", "with", "and", "the")]
+        + dish_queries[:3]
+        + [w for w in re.findall(r"[a-z]{3,}", lower) if w not in ("something", "with", "and", "the", "want")]
     ))[:12]
 
-    return {
+    result = {
+        "search_mode": search_mode,
+        "dish_anchor": dish_anchor,
+        "dish_queries": dish_queries,
         "protein": protein,
-        "protein_query": protein_query,
+        "protein_query": protein,
         "starches": starches,
         "flavors": flavors,
         "cuisine": cuisine,
         "mood": mood,
-        "main_query": main_query,
-        "pairing_queries": pairing_queries,
+        "main_query": dish_queries[0] if dish_queries else (protein or text.strip()[:60]),
+        "pairing_queries": [],
         "search_terms": search_terms,
+        "needs_protein_prompt": bool(dish_anchor and not protein),
+        "protein_options": PROTEIN_OPTIONS,
     }
+    return result
 
 
 async def parse_craving(text: str) -> tuple[dict[str, Any], bool]:
@@ -161,3 +214,27 @@ async def parse_craving(text: str) -> tuple[dict[str, Any], bool]:
         return parsed, False
     except Exception:
         return mock_parse_craving(text), True
+
+
+def apply_protein_filter(parsed: dict[str, Any], protein_filter: str | None) -> dict[str, Any]:
+    """Apply an explicit UI protein choice (narrow or clear)."""
+    out = dict(parsed)
+    if protein_filter is None:
+        out["protein"] = None
+        out["protein_query"] = None
+        out["vegetarian_filter"] = False
+        if out.get("search_mode") == "dish" and out.get("dish_anchor"):
+            out["needs_protein_prompt"] = True
+        return out
+    p = protein_filter.strip().lower()
+    if p == "vegetarian":
+        out["protein"] = None
+        out["protein_query"] = None
+        out["needs_protein_prompt"] = False
+        out["vegetarian_filter"] = True
+        return out
+    out["protein"] = p
+    out["protein_query"] = p
+    out["needs_protein_prompt"] = False
+    out["vegetarian_filter"] = False
+    return out

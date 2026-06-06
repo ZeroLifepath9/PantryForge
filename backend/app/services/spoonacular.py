@@ -444,6 +444,128 @@ def _mentions_protein(card: dict[str, Any], protein: str) -> bool:
     return protein in blob
 
 
+def _is_vegetarian_card(card: dict[str, Any]) -> bool:
+    diets = {d.lower() for d in (card.get("diets") or [])}
+    return "vegetarian" in diets or "vegan" in diets
+
+
+def _dish_family_label(anchor: str | None) -> str:
+    labels = {
+        "taco": "taco-style",
+        "pasta": "pasta",
+        "pizza": "pizza",
+        "burger": "burger",
+        "curry": "curry",
+        "stir_fry": "stir-fry",
+        "soup": "soup",
+        "salad": "salad",
+    }
+    return labels.get(anchor or "", "dish")
+
+
+async def _search_dish_family(
+    parsed: dict[str, Any],
+    *,
+    diets: list[str],
+    intolerances: list[str],
+) -> dict[str, Any]:
+    from app.services.dish_families import detect_dish_anchor, matches_dish_family
+
+    dish_anchor = parsed.get("dish_anchor")
+    dish_queries = list(parsed.get("dish_queries") or [])
+    if dish_anchor and not dish_queries:
+        _, dish_queries = detect_dish_anchor(parsed.get("main_query") or "")
+    if not dish_queries and dish_anchor:
+        dish_queries = [dish_anchor.replace("_", " ")]
+
+    protein = (parsed.get("protein") or "").strip().lower()
+    vegetarian_only = bool(parsed.get("vegetarian_filter"))
+    cuisine = parsed.get("cuisine")
+    family_label = _dish_family_label(dish_anchor)
+
+    per_query = max(3, 14 // max(len(dish_queries), 1))
+    mains: list[dict[str, Any]] = []
+    pairings: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    for dq in dish_queries:
+        query = f"{protein} {dq}".strip() if protein else dq
+        batch = await complex_search(
+            query=query,
+            number=per_query,
+            diets=diets,
+            intolerances=intolerances,
+            dish_type="main course",
+        )
+        for card in batch:
+            if card["id"] in seen:
+                continue
+            if dish_anchor and not matches_dish_family(card, dish_anchor):
+                continue
+            if protein and not _mentions_protein(card, protein):
+                continue
+            if vegetarian_only and not _is_vegetarian_card(card):
+                continue
+            card = dict(card)
+            card["category"] = "main"
+            seen.add(card["id"])
+            mains.append(card)
+
+    if cuisine and len(pairings) < 8:
+        side_query = f"{cuisine} side dish"
+        if protein:
+            side_query = f"{protein} {side_query}"
+        side_batch = await complex_search(
+            query=side_query,
+            number=6,
+            diets=diets,
+            intolerances=intolerances,
+        )
+        for card in side_batch:
+            if card["id"] in seen:
+                continue
+            if protein and not _mentions_protein(card, protein):
+                continue
+            if vegetarian_only and not _is_vegetarian_card(card):
+                continue
+            cat = card.get("category") or "side"
+            if cat not in ("side", "salad", "dip"):
+                cat = "side"
+            card = dict(card)
+            card["category"] = cat
+            seen.add(card["id"])
+            pairings.append(card)
+
+    adjacent = ", ".join(dish_queries[:4])
+    message = None
+    total = len(mains) + len(pairings)
+    if total:
+        if protein:
+            message = (
+                f"{family_label.title()} dishes with {protein} — "
+                f"including {adjacent} and more."
+            )
+        else:
+            message = (
+                f"{family_label.title()} recipes — tacos, burritos, fajitas & adjacents. "
+                "Pick a protein below to narrow these down."
+                if dish_anchor == "taco"
+                else f"{family_label.title()} recipes ({adjacent}). Pick a protein to narrow down."
+            )
+    else:
+        if protein:
+            message = f"No {family_label} recipes found for {protein}. Try another protein or loosen filters."
+        else:
+            message = f"No {family_label} recipes found. Try loosening diet filters."
+
+    return {
+        "mains": mains[:12],
+        "pairings": pairings[:12],
+        "message": message,
+        "search_mode": "dish",
+    }
+
+
 async def search_by_craving(
     parsed: dict[str, Any],
     *,
@@ -452,17 +574,23 @@ async def search_by_craving(
 ) -> dict[str, Any]:
     diets = diets or []
     intolerances = intolerances or []
+    search_mode = (parsed.get("search_mode") or "general").lower()
+
+    if search_mode == "dish" and parsed.get("dish_anchor"):
+        result = await _search_dish_family(parsed, diets=diets, intolerances=intolerances)
+        result["protein_search"] = parsed.get("protein") or parsed.get("dish_anchor")
+        return result
+
     protein = (parsed.get("protein") or "").strip().lower()
     search_anchor = protein or (parsed.get("protein_query") or parsed.get("main_query") or "dinner")
 
-    # Protein-first: every Spoonacular query leads with the protein, not noodles/mood/etc.
     search_plan: list[tuple[str, str | None, str, int]] = []
-    if protein:
+    if search_mode == "protein" or protein:
         search_plan = [
-            (protein, "main course", "main", 10),
-            (protein, None, "side", 8),
-            (protein, None, "salad", 8),
-            (protein, None, "dip", 6),
+            (protein or search_anchor, "main course", "main", 10),
+            (protein or search_anchor, None, "side", 8),
+            (protein or search_anchor, None, "salad", 8),
+            (protein or search_anchor, None, "dip", 6),
         ]
     else:
         search_plan = [
@@ -516,11 +644,12 @@ async def search_by_craving(
         else:
             message = f"No recipes found for {protein}. Try another protein or loosen diet filters."
     elif not mains and not pairings:
-        message = "No matches — name a protein in what sounds good (chicken, salmon, beef…)."
+        message = "No matches — try naming a dish (tacos, pasta) or a protein (chicken, salmon)."
 
     return {
         "mains": mains[:8],
         "pairings": pairings[:20],
         "message": message,
         "protein_search": protein or search_anchor,
+        "search_mode": search_mode,
     }

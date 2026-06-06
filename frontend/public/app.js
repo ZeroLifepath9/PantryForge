@@ -10,6 +10,8 @@ let meta = {
   spoonacular_configured: false,
 };
 let lastCraving = null;
+let selectedProteinFilter = null;
+let proteinFilterExplicit = false;
 let selectedIds = new Set();
 let inspiredSetup = null;
 let pendingSubstitutions = [];
@@ -218,6 +220,20 @@ function bindMealCards(container) {
   });
 }
 
+function dishFamilyLabel(anchor) {
+  const labels = {
+    taco: "Tacos & adjacents",
+    pasta: "Pasta dishes",
+    pizza: "Pizza & flatbreads",
+    burger: "Burgers",
+    curry: "Curry dishes",
+    stir_fry: "Stir-fry",
+    soup: "Soups & stews",
+    salad: "Salads & bowls",
+  };
+  return labels[anchor] || anchor?.replace(/_/g, " ") || "Dish search";
+}
+
 function renderParsedCraving(parsed) {
   const el = $("parsed-craving");
   if (!parsed) {
@@ -225,7 +241,13 @@ function renderParsedCraving(parsed) {
     return;
   }
   const chips = [];
-  if (parsed.protein) {
+  if (parsed.search_mode === "dish" && parsed.dish_anchor) {
+    chips.push(dishFamilyLabel(parsed.dish_anchor));
+    if (parsed.dish_queries?.length) {
+      chips.push(parsed.dish_queries.slice(0, 5).join(" · "));
+    }
+    if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
+  } else if (parsed.protein) {
     chips.push(`Searching: ${parsed.protein} dishes`);
   } else if (parsed.main_query) {
     chips.push(`Searching: ${parsed.main_query}`);
@@ -240,6 +262,46 @@ function renderParsedCraving(parsed) {
   el.innerHTML = chips.map((c) => `<span>${c}</span>`).join("");
 }
 
+function renderProteinPrompt(parsed) {
+  const block = $("protein-prompt");
+  const options = $("protein-options");
+  if (!block || !options) return;
+
+  const show =
+    parsed?.search_mode === "dish" &&
+    parsed?.dish_anchor &&
+    (parsed.protein_options?.length || parsed.needs_protein_prompt);
+
+  if (!show) {
+    block.classList.add("hidden");
+    options.innerHTML = "";
+    return;
+  }
+
+  block.classList.remove("hidden");
+  const choices = parsed.protein_options || [];
+  const active = proteinFilterExplicit
+    ? (selectedProteinFilter || "")
+    : (parsed.protein || "");
+
+  options.innerHTML = [
+    `<button type="button" class="protein-chip${active === "" ? " active" : ""}" data-protein="">All proteins</button>`,
+    ...choices.map(
+      (p) =>
+        `<button type="button" class="protein-chip${active === p ? " active" : ""}" data-protein="${escapeHtml(p)}">${escapeHtml(p)}</button>`
+    ),
+  ].join("");
+
+  options.querySelectorAll(".protein-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const protein = btn.dataset.protein || null;
+      if (protein === selectedProteinFilter) return;
+      selectedProteinFilter = protein;
+      runSearch({ proteinFilter: protein });
+    });
+  });
+}
+
 function renderCravingResults(data) {
   lastCraving = data;
   selectedIds = new Set();
@@ -249,11 +311,17 @@ function renderCravingResults(data) {
 
   const recipes = normalizeRecipes(data);
   const total = recipes.length;
-  $("results-heading").textContent = total ? `Recipes for you (${total})` : "Recipes for you";
+  const parsed = data.parsed || {};
+  const dishTitle =
+    parsed.search_mode === "dish" && parsed.dish_anchor
+      ? dishFamilyLabel(parsed.dish_anchor)
+      : "Recipes for you";
+  $("results-heading").textContent = total ? `${dishTitle} (${total})` : dishTitle;
   $("results-message").textContent = data.message || (total
     ? `${total} recipe${total === 1 ? "" : "s"} to inspire your own creation.`
     : "No matches yet.");
-  renderParsedCraving(data.parsed);
+  renderParsedCraving(parsed);
+  renderProteinPrompt(parsed);
 
   let list = $("recipes-list");
   if (!list) {
@@ -265,7 +333,7 @@ function renderCravingResults(data) {
   }
 
   if (!total) {
-    list.innerHTML = `<p class="hint">No matches. Try describing a protein, starch, or mood — or loosen diet filters.</p>`;
+    list.innerHTML = `<p class="hint">No matches. Try tacos, pasta, chicken, or loosen diet filters.</p>`;
     updateSelectionUI();
     return;
   }
@@ -276,24 +344,33 @@ function renderCravingResults(data) {
   $("results-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-async function runSearch() {
+async function runSearch(opts = {}) {
   const text = soundsGoodText();
   if (!text) {
     setStatus($("search-status"), "Tell me what sounds good first.", true);
     return;
   }
+  if (!("proteinFilter" in opts)) {
+    selectedProteinFilter = null;
+    proteinFilterExplicit = false;
+  } else {
+    selectedProteinFilter = opts.proteinFilter;
+    proteinFilterExplicit = true;
+  }
   setStatus($("search-status"), "Understanding your craving…");
   $("search-btn").disabled = true;
   try {
     await savePreferences();
+    const body = {
+      what_sounds_good: text,
+      diets: selectedDiets(),
+      intolerances: selectedIntolerances(),
+      health_conditions: selectedHealthConditions(),
+    };
+    if (proteinFilterExplicit) body.protein_filter = selectedProteinFilter || null;
     const data = await api("/search/craving", {
       method: "POST",
-      body: JSON.stringify({
-        what_sounds_good: text,
-        diets: selectedDiets(),
-        intolerances: selectedIntolerances(),
-        health_conditions: selectedHealthConditions(),
-      }),
+      body: JSON.stringify(body),
     });
     renderCravingResults(data);
     setStatus(

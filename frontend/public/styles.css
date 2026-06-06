@@ -395,6 +395,53 @@ textarea { resize: vertical; min-height: 5rem; }
   font-size: 0.85rem;
 }
 
+.protein-prompt {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.protein-prompt-label {
+  margin: 0 0 0.6rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.hint-inline {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.protein-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.protein-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.protein-chip:hover {
+  border-color: var(--accent);
+}
+
+.protein-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .results-scroll {
   max-height: min(70vh, 42rem);
   overflow-y: auto;

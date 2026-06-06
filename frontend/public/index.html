@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-protein" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-dish" />
 </head>
 <body>
   <header class="site-header">
@@ -48,10 +48,10 @@
 
     <section id="search-panel" class="panel panel-main hidden">
       <h2>What sounds good?</h2>
-      <p class="hint">Name the protein that sounds good (chicken, salmon, beef). Mood and sides shape inspiration — search is protein-first.</p>
+      <p class="hint">Name a dish (tacos, pasta) or a protein (chicken, salmon). We'll find the dish plus adjacents — like burritos and fajitas for tacos.</p>
       <label class="field-grow">
         What sounds good?
-        <textarea id="sounds-good-input" rows="3" maxlength="500" placeholder="e.g. chicken with noodles and something fresh on the side"></textarea>
+        <textarea id="sounds-good-input" rows="3" maxlength="500" placeholder="e.g. I want tacos · chicken pasta · salmon with something light"></textarea>
       </label>
 
       <fieldset class="filter-fieldset filter-diets">
@@ -84,6 +84,10 @@
         <p id="results-message" class="hint"></p>
       </div>
       <div id="parsed-craving" class="parsed-chips hidden"></div>
+      <div id="protein-prompt" class="protein-prompt hidden">
+        <p class="protein-prompt-label">Pick a protein to narrow these down <span class="hint-inline">(optional)</span></p>
+        <div id="protein-options" class="protein-options"></div>
+      </div>
 
       <div id="recipes-list" class="meal-card-grid results-scroll"></div>
 
@@ -139,6 +143,6 @@
     <p id="build-tag" class="build-tag" aria-hidden="true"></p>
   </footer>
 
-  <script src="/static/app.js?v=20250606-protein"></script>
+  <script src="/static/app.js?v=20250606-dish"></script>
 </body>
 </html>
