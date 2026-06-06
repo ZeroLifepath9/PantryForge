@@ -19,7 +19,18 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
+    from sqlalchemy import text
+
     from app import models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE user_preferences "
+                    "ADD COLUMN health_conditions_json TEXT DEFAULT '[]'"
+                )
+            )
+        except Exception:
+            pass

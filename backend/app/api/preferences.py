@@ -20,6 +20,7 @@ def _to_response(prefs: UserPreferences) -> PreferencesResponse:
     return PreferencesResponse(
         diets=prefs.diets(),
         intolerances=prefs.intolerances(),
+        health_conditions=prefs.health_conditions(),
         skill_level=prefs.skill_level,
         explain_techniques=prefs.explain_techniques,
         include_pantry_staples=prefs.include_pantry_staples,
@@ -61,6 +62,8 @@ async def update_my_preferences(
         prefs.diets_json = json.dumps(body.diets)
     if body.intolerances is not None:
         prefs.intolerances_json = json.dumps(body.intolerances)
+    if body.health_conditions is not None:
+        prefs.health_conditions_json = json.dumps(body.health_conditions)
     if body.skill_level is not None:
         prefs.skill_level = body.skill_level
     if body.explain_techniques is not None:

@@ -29,6 +29,7 @@ class UserPreferences(Base):
     )
     diets_json: Mapped[str] = mapped_column(Text, default="[]")
     intolerances_json: Mapped[str] = mapped_column(Text, default="[]")
+    health_conditions_json: Mapped[str] = mapped_column(Text, default="[]")
     skill_level: Mapped[str] = mapped_column(String(32), default="beginner")
     explain_techniques: Mapped[bool] = mapped_column(Boolean, default=True)
     include_pantry_staples: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -42,6 +43,9 @@ class UserPreferences(Base):
 
     def intolerances(self) -> list[str]:
         return json.loads(self.intolerances_json or "[]")
+
+    def health_conditions(self) -> list[str]:
+        return json.loads(self.health_conditions_json or "[]")
 
     def pantry_staples(self) -> list[str]:
         raw = json.loads(self.pantry_staples_json or "[]")

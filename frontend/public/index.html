@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pantry Forge — What can I make?</title>
+  <title>AlchemyPantry — What are we working with?</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -13,9 +13,9 @@
   <header class="site-header">
     <div class="header-inner">
       <div>
-        <p class="eyebrow">Cook with what you have</p>
-        <h1>Pantry Forge</h1>
-        <p class="tagline">Tell us what's in your kitchen. We'll show what you can make — and teach you how.</p>
+        <p class="eyebrow">What sounds good, what have you got?</p>
+        <h1>AlchemyPantry</h1>
+        <p class="tagline">I will show you what you can make and teach you how.</p>
       </div>
       <div class="header-actions">
         <span id="mock-badge" class="badge badge-mock hidden">Mock data</span>
@@ -29,8 +29,8 @@
   <main class="layout">
     <section id="landing-panel" class="landing-panel">
       <div class="landing-card">
-        <h2>What's in your kitchen?</h2>
-        <p class="hint">Start as a guest to try it now, or create an account so we can remember your tastes.</p>
+        <h2>What are we working with?</h2>
+        <p class="hint">Start as a guest to try it now, or create an account so I can remember your tastes.</p>
 
         <button type="button" id="guest-btn" class="btn-primary btn-wide btn-guest">Continue as guest</button>
 
@@ -51,7 +51,7 @@
     </section>
 
     <section id="search-panel" class="panel panel-main hidden">
-      <h2>What's in your kitchen?</h2>
+      <h2>What are we working with?</h2>
       <label class="field-grow">
         Ingredients
         <textarea id="ingredient-input" rows="3" placeholder="e.g. 2 eggs, tomato, basil, old cheddar"></textarea>
@@ -64,9 +64,15 @@
       </fieldset>
 
       <fieldset class="filter-fieldset filter-health">
-        <legend>Health restrictions</legend>
-        <p class="fieldset-hint">Allergies and intolerances — we'll avoid recipes that conflict.</p>
+        <legend>Allergies &amp; intolerances</legend>
+        <p class="fieldset-hint">Food allergies and sensitivities — recipes that conflict are filtered out.</p>
         <div id="intolerance-options" class="chip-grid"></div>
+      </fieldset>
+
+      <fieldset class="filter-fieldset filter-medical">
+        <legend>Medical dietary needs</legend>
+        <p class="fieldset-hint">Heart health, diabetes, sodium, and other doctor-guided restrictions.</p>
+        <div id="health-condition-options" class="chip-grid"></div>
       </fieldset>
 
       <div class="toggle-row">
@@ -107,7 +113,7 @@
   </main>
 
   <footer class="site-footer">
-    <p id="footer-note">Pantry Forge · mock recipes until Spoonacular key is added</p>
+    <p id="footer-note">AlchemyPantry · mock recipes until Spoonacular key is added</p>
   </footer>
 
   <script src="/static/app.js"></script>

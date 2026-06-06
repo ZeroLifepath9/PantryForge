@@ -11,6 +11,7 @@ async def search_recipes(
     *,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
+    health_conditions: list[str] | None = None,
     include_pantry_staples: bool = True,
     pantry_staples: list[str] | None = None,
 ) -> tuple[dict, bool]:
@@ -19,6 +20,7 @@ async def search_recipes(
             ingredients,
             diets=diets,
             intolerances=intolerances,
+            health_conditions=health_conditions,
             include_pantry_staples=include_pantry_staples,
             pantry_staples=pantry_staples or settings.pantry_staple_list(),
         )
@@ -28,6 +30,7 @@ async def search_recipes(
         ingredients,
         diets=diets,
         intolerances=intolerances,
+        health_conditions=health_conditions,
         include_pantry_staples=include_pantry_staples,
         pantry_staples=pantry_staples or settings.pantry_staple_list(),
     )

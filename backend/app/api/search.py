@@ -27,6 +27,7 @@ async def search_meta():
         mock_mode=settings.mock_mode,
         diets=[DietOption(**d) for d in mock_data.DIET_OPTIONS],
         intolerances=[DietOption(**d) for d in mock_data.INTOLERANCE_OPTIONS],
+        health_conditions=[DietOption(**d) for d in mock_data.HEALTH_CONDITION_OPTIONS],
     )
 
 
@@ -57,6 +58,7 @@ async def search_recipes_endpoint(
         body.ingredients,
         diets=diets,
         intolerances=intolerances,
+        health_conditions=body.health_conditions,
         include_pantry_staples=include_pantry,
         pantry_staples=pantry_staples,
     )

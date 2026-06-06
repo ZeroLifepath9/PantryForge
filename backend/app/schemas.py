@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
 class PreferencesResponse(BaseModel):
     diets: list[str] = []
     intolerances: list[str] = []
+    health_conditions: list[str] = []
     skill_level: str = "beginner"
     explain_techniques: bool = True
     include_pantry_staples: bool = True
@@ -41,6 +42,7 @@ class PreferencesResponse(BaseModel):
 class PreferencesUpdate(BaseModel):
     diets: list[str] | None = None
     intolerances: list[str] | None = None
+    health_conditions: list[str] | None = None
     skill_level: str | None = None
     explain_techniques: bool | None = None
     include_pantry_staples: bool | None = None
@@ -60,6 +62,7 @@ class SearchRecipesRequest(BaseModel):
     ingredients: list[str] = Field(min_length=1)
     diets: list[str] = []
     intolerances: list[str] = []
+    health_conditions: list[str] = []
     include_pantry_staples: bool = True
     pantry_staples: list[str] = []
 
@@ -137,3 +140,4 @@ class MetaResponse(BaseModel):
     mock_mode: bool
     diets: list[DietOption]
     intolerances: list[DietOption]
+    health_conditions: list[DietOption]

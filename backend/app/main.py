@@ -35,8 +35,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Pantry Forge",
-    description="What can I make with what I have?",
+    title="AlchemyPantry",
+    description="What are we working with? I'll show you what you can make.",
     version="0.1.0",
     lifespan=lifespan,
     docs_url=None if settings.is_production else "/docs",
@@ -61,7 +61,7 @@ app.include_router(recipes_router)
 def _health_payload() -> dict:
     return {
         "status": "ok",
-        "app": "pantry-forge",
+        "app": "alchemy-pantry",
         "mock_mode": settings.mock_mode,
         "env": settings.env,
     }

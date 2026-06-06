@@ -29,6 +29,16 @@ INTOLERANCE_OPTIONS = [
     {"value": "wheat", "label": "Wheat"},
 ]
 
+HEALTH_CONDITION_OPTIONS = [
+    {"value": "cardiac", "label": "Heart-healthy / cardiac"},
+    {"value": "diabetes", "label": "Diabetes-friendly"},
+    {"value": "low-sodium", "label": "Low sodium"},
+    {"value": "low-cholesterol", "label": "Low cholesterol"},
+    {"value": "renal", "label": "Kidney-friendly / renal"},
+    {"value": "gerd", "label": "Acid reflux / GERD"},
+    {"value": "anti-inflammatory", "label": "Anti-inflammatory"},
+]
+
 MOCK_RECIPES: list[dict[str, Any]] = [
     {
         "id": 1001,
@@ -39,6 +49,7 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "servings": 2,
         "diets": ["vegetarian", "gluten-free"],
         "intolerance_conflicts": ["dairy", "egg"],
+        "health_friendly": ["diabetes", "gerd", "anti-inflammatory"],
         "required": ["egg", "tomato", "basil", "butter", "salt", "pepper"],
         "source_url": "https://example.com/basil-tomato-egg-scramble",
         "video_url": "https://www.youtube.com/watch?v=mock-scramble",
@@ -59,6 +70,7 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "servings": 1,
         "diets": ["vegetarian", "gluten-free"],
         "intolerance_conflicts": ["dairy", "egg"],
+        "health_friendly": ["gerd"],
         "required": ["egg", "cheese", "basil", "butter", "salt"],
         "source_url": "https://example.com/cheddar-basil-omelette",
         "video_url": None,
@@ -78,6 +90,9 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "servings": 3,
         "diets": ["vegetarian", "vegan"],
         "intolerance_conflicts": ["gluten", "wheat", "grain"],
+        "health_friendly": [
+            "cardiac", "diabetes", "low-cholesterol", "renal", "gerd", "anti-inflammatory",
+        ],
         "required": ["pasta", "tomato", "garlic", "olive oil", "salt", "basil"],
         "source_url": "https://example.com/simple-tomato-pasta",
         "video_url": "https://www.youtube.com/watch?v=mock-pasta",
@@ -97,6 +112,7 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "servings": 2,
         "diets": ["vegetarian"],
         "intolerance_conflicts": ["dairy", "gluten", "wheat", "grain"],
+        "health_friendly": [],
         "required": ["pasta", "cheese", "garlic", "butter", "salt", "pepper"],
         "source_url": "https://example.com/cheesy-garlic-pasta",
         "video_url": None,
@@ -115,6 +131,9 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "servings": 2,
         "diets": ["vegan", "dairy-free", "gluten-free"],
         "intolerance_conflicts": ["soy"],
+        "health_friendly": [
+            "cardiac", "diabetes", "low-cholesterol", "renal", "anti-inflammatory",
+        ],
         "required": ["mushroom", "onion", "garlic", "olive oil", "soy sauce", "pepper"],
         "source_url": "https://example.com/mushroom-onion-stirfry",
         "video_url": "https://www.youtube.com/watch?v=mock-stirfry",
@@ -171,6 +190,15 @@ def _recipe_matches_intolerances(recipe: dict[str, Any], intolerances: list[str]
     return not conflicts.intersection(intolerances)
 
 
+def _recipe_matches_health_conditions(
+    recipe: dict[str, Any], health_conditions: list[str]
+) -> bool:
+    if not health_conditions:
+        return True
+    friendly = set(recipe.get("health_friendly", []))
+    return all(h in friendly for h in health_conditions)
+
+
 def _classify_tier(
     missed: list[str],
     pantry: set[str],
@@ -193,11 +221,13 @@ def mock_search_recipes(
     *,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
+    health_conditions: list[str] | None = None,
     include_pantry_staples: bool = True,
     pantry_staples: list[str] | None = None,
 ) -> dict[str, Any]:
     diets = diets or []
     intolerances = intolerances or []
+    health_conditions = health_conditions or []
     user_set = {_normalize(i) for i in ingredients}
     pantry = {_normalize(p) for p in (pantry_staples or [])}
     default_pantry = {
@@ -213,6 +243,8 @@ def mock_search_recipes(
         if not _recipe_matches_diets(recipe, diets):
             continue
         if not _recipe_matches_intolerances(recipe, intolerances):
+            continue
+        if not _recipe_matches_health_conditions(recipe, health_conditions):
             continue
 
         required = recipe["required"]

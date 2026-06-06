@@ -1,7 +1,7 @@
 const API = "";
 let token = localStorage.getItem("pf_token") || "";
 let isGuest = false;
-let meta = { diets: [], intolerances: [], mock_mode: true };
+let meta = { diets: [], intolerances: [], health_conditions: [], mock_mode: true };
 let lastResults = [];
 let currentRecipeId = null;
 let stepMode = "beginner";
@@ -50,6 +50,12 @@ function selectedIntolerances() {
   return [...document.querySelectorAll("#intolerance-options input:checked")].map((el) => el.value);
 }
 
+function selectedHealthConditions() {
+  return [...document.querySelectorAll("#health-condition-options input:checked")].map(
+    (el) => el.value
+  );
+}
+
 function renderChipOptions(containerId, options, name) {
   const wrap = $(containerId);
   wrap.innerHTML = (options || [])
@@ -68,6 +74,10 @@ function renderIntoleranceOptions() {
   renderChipOptions("intolerance-options", meta.intolerances, "intolerance");
 }
 
+function renderHealthConditionOptions() {
+  renderChipOptions("health-condition-options", meta.health_conditions, "health");
+}
+
 function applyPreferences(prefs) {
   if (!prefs) return;
   $("explain-techniques").checked = prefs.explain_techniques;
@@ -77,6 +87,9 @@ function applyPreferences(prefs) {
   });
   document.querySelectorAll("#intolerance-options input").forEach((el) => {
     el.checked = prefs.intolerances.includes(el.value);
+  });
+  document.querySelectorAll("#health-condition-options input").forEach((el) => {
+    el.checked = (prefs.health_conditions || []).includes(el.value);
   });
 }
 
@@ -94,6 +107,7 @@ async function savePreferences() {
       body: JSON.stringify({
         diets: selectedDiets(),
         intolerances: selectedIntolerances(),
+        health_conditions: selectedHealthConditions(),
         explain_techniques: $("explain-techniques").checked,
         include_pantry_staples: $("include-pantry").checked,
       }),
@@ -267,6 +281,7 @@ async function runSearch() {
           ingredients: parsed.ingredients,
           diets: selectedDiets(),
           intolerances: selectedIntolerances(),
+          health_conditions: selectedHealthConditions(),
           include_pantry_staples: $("include-pantry").checked,
         }),
       });
@@ -303,6 +318,7 @@ async function bootstrap() {
     meta = await api("/search/meta");
     renderDietOptions();
     renderIntoleranceOptions();
+    renderHealthConditionOptions();
     if (meta.mock_mode) $("mock-badge").classList.remove("hidden");
   } catch {
     setStatus($("auth-status"), "Could not reach API. Is the server running?", true);
@@ -393,7 +409,9 @@ $("mode-direct").addEventListener("click", async () => {
 document.addEventListener("change", (e) => {
   const t = e.target;
   if (
-    t.matches("#diet-options input, #intolerance-options input, #include-pantry, #explain-techniques")
+    t.matches(
+      "#diet-options input, #intolerance-options input, #health-condition-options input, #include-pantry, #explain-techniques"
+    )
   ) {
     schedulePrefsSave();
   }
