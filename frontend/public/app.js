@@ -3,6 +3,7 @@ let token = localStorage.getItem("pf_token") || "";
 let isGuest = false;
 let meta = { diets: [], intolerances: [], health_conditions: [], mock_mode: true };
 let lastResults = [];
+let lastSearchContext = { ingredients: [], effective: [] };
 let currentRecipeId = null;
 let stepMode = "beginner";
 let prefsSaveTimer = null;
@@ -154,8 +155,111 @@ function showApp(displayName = "", guest = false) {
   }
 }
 
+function categoryLabel(cat) {
+  const labels = {
+    main: "Main",
+    side: "Side",
+    salad: "Salad",
+    dip: "Dip",
+    upgrade: "Upgrade",
+    pairing: "Pairing",
+  };
+  return labels[cat] || cat;
+}
+
+function renderAdvisor(data) {
+  const panel = $("advisor-panel");
+  if (!data) {
+    panel.classList.add("hidden");
+    return;
+  }
+  panel.classList.remove("hidden");
+  $("advisor-headline").textContent = data.headline || "Kitchen advisor";
+  $("advisor-summary").textContent = data.summary || "";
+  const badge = $("advisor-badge");
+  if (data.mock && !data.xai_configured) {
+    badge.textContent = "Guidance mode";
+    badge.classList.remove("hidden");
+  } else if (data.mock) {
+    badge.textContent = "AI fallback";
+    badge.classList.remove("hidden");
+  } else {
+    badge.textContent = "AI advisor";
+    badge.classList.remove("hidden");
+  }
+
+  const picks = $("advisor-picks");
+  picks.innerHTML = (data.top_picks || [])
+    .map(
+      (p) => `
+      <article class="advisor-pick advisor-pick-${p.category}">
+        <span class="advisor-pick-cat">${categoryLabel(p.category)}</span>
+        <strong>${p.title}</strong>
+        <p>${p.why}</p>
+        ${
+          p.recipe_id
+            ? `<button type="button" class="btn-ghost advisor-open-recipe" data-open-recipe="${p.recipe_id}">Open recipe</button>`
+            : ""
+        }
+      </article>`
+    )
+    .join("");
+
+  picks.querySelectorAll(".advisor-open-recipe").forEach((btn) => {
+    btn.addEventListener("click", () => openRecipe(Number(btn.dataset.openRecipe)));
+  });
+
+  $("advisor-sections").innerHTML = (data.sections || [])
+    .map(
+      (s) => `
+      <article class="advisor-section">
+        <h4>${s.heading}</h4>
+        <p>${s.body}</p>
+      </article>`
+    )
+    .join("");
+  setStatus($("advisor-status"), "");
+}
+
+async function loadAdvisorInsights(searchData) {
+  const ingredients = searchData.effective_ingredients?.length
+    ? searchData.effective_ingredients
+    : lastSearchContext.ingredients;
+  if (!ingredients?.length || !lastResults.length) {
+    renderAdvisor(null);
+    return;
+  }
+  $("advisor-panel").classList.remove("hidden");
+  $("advisor-headline").textContent = "Kitchen advisor";
+  $("advisor-summary").textContent = "Reading your pantry and restrictions…";
+  $("advisor-picks").innerHTML = "";
+  $("advisor-sections").innerHTML = "";
+  setStatus($("advisor-status"), "Getting insights…");
+  try {
+    const soundsGood = $("sounds-good-input")?.value?.trim() || null;
+    const data = await api("/advisor/insights", {
+      method: "POST",
+      body: JSON.stringify({
+        ingredients,
+        diets: selectedDiets(),
+        intolerances: selectedIntolerances(),
+        health_conditions: selectedHealthConditions(),
+        recipes: lastResults,
+        what_sounds_good: soundsGood,
+      }),
+    });
+    renderAdvisor(data);
+  } catch (err) {
+    setStatus($("advisor-status"), `Advisor: ${err.message}`, true);
+  }
+}
+
 function renderResults(data) {
   lastResults = data.results || [];
+  lastSearchContext = {
+    ingredients: data.query_ingredients || [],
+    effective: data.effective_ingredients || [],
+  };
   $("results-panel").classList.remove("hidden");
   $("recipe-panel").classList.add("hidden");
   const count = lastResults.length;
@@ -174,6 +278,7 @@ function renderResults(data) {
   const list = $("results-list");
   if (!lastResults.length) {
     list.innerHTML = `<p class="hint">No matches. Try adding pasta, oil, or cheese — or loosen diet filters.</p>`;
+    renderAdvisor(null);
     return;
   }
 
@@ -214,6 +319,7 @@ function renderResults(data) {
   });
 
   $("results-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  loadAdvisorInsights(data);
 }
 
 async function openRecipe(id) {

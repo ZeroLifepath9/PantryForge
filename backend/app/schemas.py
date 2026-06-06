@@ -141,3 +141,45 @@ class MetaResponse(BaseModel):
     diets: list[DietOption]
     intolerances: list[DietOption]
     health_conditions: list[DietOption]
+
+
+class AdvisorRecipeInput(BaseModel):
+    id: int
+    title: str
+    match_tier: str = "almost"
+    match_label: str = ""
+    summary: str | None = None
+    diets: list[str] = []
+    used_ingredients: list[IngredientMatch] = []
+    missed_ingredients: list[IngredientMatch] = []
+
+
+class AdvisorInsightsRequest(BaseModel):
+    ingredients: list[str] = Field(min_length=1)
+    diets: list[str] = []
+    intolerances: list[str] = []
+    health_conditions: list[str] = []
+    recipes: list[AdvisorRecipeInput] = []
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+
+
+class AdvisorPick(BaseModel):
+    category: str
+    title: str
+    why: str
+    recipe_id: int | None = None
+
+
+class AdvisorInsightSection(BaseModel):
+    heading: str
+    body: str
+
+
+class AdvisorInsightsResponse(BaseModel):
+    headline: str
+    summary: str
+    top_picks: list[AdvisorPick] = []
+    sections: list[AdvisorInsightSection] = []
+    mock: bool = False
+    xai_configured: bool = False
+    prompt_version: str | None = None

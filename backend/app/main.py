@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from app.api import auth_router, preferences_router, recipes_router, search_router
+from app.api import advisor_router, auth_router, preferences_router, recipes_router, search_router
 from app.config import settings, validate_production_settings
 from app.database import init_db
 
@@ -25,7 +25,7 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 # Bump when shipping UI changes — breaks browser cache for static assets.
-APP_VERSION = os.environ.get("APP_VERSION", "20250606-results25")
+APP_VERSION = os.environ.get("APP_VERSION", "20250606-advisor")
 
 
 @asynccontextmanager
@@ -57,6 +57,7 @@ app.include_router(auth_router)
 app.include_router(preferences_router)
 app.include_router(search_router)
 app.include_router(recipes_router)
+app.include_router(advisor_router)
 
 
 def _health_payload() -> dict:
@@ -65,6 +66,7 @@ def _health_payload() -> dict:
         "app": "alchemy-pantry",
         "version": APP_VERSION,
         "mock_mode": settings.mock_mode,
+        "xai_configured": bool(settings.xai_api_key),
         "env": settings.env,
     }
 

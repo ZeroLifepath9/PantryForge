@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-results25" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-advisor" />
 </head>
 <body>
   <header class="site-header">
@@ -57,6 +57,11 @@
         <textarea id="ingredient-input" rows="3" placeholder="e.g. 2 eggs, tomato, basil, old cheddar"></textarea>
       </label>
 
+      <label class="field-grow">
+        What sounds good? <span class="optional-label">optional</span>
+        <input id="sounds-good-input" type="text" maxlength="500" placeholder="e.g. something light, crispy, comfort food, a side salad" />
+      </label>
+
       <fieldset class="filter-fieldset filter-diets">
         <legend>Lifestyle diets</legend>
         <p class="fieldset-hint">Optional — choose how you like to eat day to day.</p>
@@ -96,6 +101,18 @@
         <p id="results-message" class="hint"></p>
       </div>
       <div id="parsed-ingredients" class="parsed-chips hidden"></div>
+
+      <section id="advisor-panel" class="advisor-panel hidden">
+        <div class="advisor-header">
+          <h3 id="advisor-headline">Kitchen advisor</h3>
+          <span id="advisor-badge" class="badge badge-advisor hidden"></span>
+        </div>
+        <p id="advisor-summary" class="hint"></p>
+        <div id="advisor-picks" class="advisor-picks"></div>
+        <div id="advisor-sections" class="advisor-sections"></div>
+        <p id="advisor-status" class="status" role="status"></p>
+      </section>
+
       <div id="results-scroll" class="results-scroll">
         <div id="results-list" class="results-list"></div>
       </div>
@@ -119,6 +136,6 @@
     <p id="build-tag" class="build-tag" aria-hidden="true"></p>
   </footer>
 
-  <script src="/static/app.js?v=20250606-results25"></script>
+  <script src="/static/app.js?v=20250606-advisor"></script>
 </body>
 </html>

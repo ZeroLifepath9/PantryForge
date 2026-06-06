@@ -19,12 +19,12 @@ services:
       - key: USE_MOCK_DATA
         value: "true"
       - key: APP_VERSION
-        value: "20250606-results25"
+        value: "20250606-advisor"
+      - key: XAI_API_KEY
+        sync: false
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./pantry_forge.db
       - key: JWT_SECRET
         generateValue: true
       - key: SPOONACULAR_API_KEY
-        sync: false
-      - key: XAI_API_KEY
         sync: false
