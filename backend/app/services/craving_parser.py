@@ -8,9 +8,9 @@ from typing import Any
 
 from app.config import settings
 from app.services.dish_families import (
+    FLAVOR_WORDS,
     PROTEIN_OPTIONS,
     detect_dish_anchor,
-    dish_keywords,
 )
 from app.services.xai_client import chat_completion
 
@@ -19,7 +19,7 @@ PARSER_SYSTEM = """You parse what a home cook says sounds good for recipe search
 Output ONLY valid JSON:
 {
   "search_mode": "dish|protein|ingredient|general",
-  "dish_anchor": "taco|pasta|pizza|burger|curry|stir_fry|soup|salad|null",
+  "dish_anchor": "taco|chili|pasta|pizza|burger|curry|stir_fry|soup|salad|null",
   "dish_queries": ["taco", "burrito", "fajita", ...],
   "protein": "chicken|beef|...|null",
   "protein_query": "protein word only or null",
@@ -35,11 +35,12 @@ Output ONLY valid JSON:
 RULES:
 1. DISH: tacos/pasta/pizza etc → search_mode=dish, dish_anchor, dish_queries WITH adjacents
    (tacos → taco, burrito, fajita, quesadilla, enchilada).
-2. Extract every food ingredient mentioned (lime, tomato, garlic, rice…) into ingredients[].
-   Do NOT put proteins or dish names in ingredients.
-3. protein = explicit protein only; null if not stated (UI will offer a protein filter).
-4. protein+ingredients without a dish → search_mode=protein or ingredient.
-5. main_query = short summary of the craving.
+2. ingredients[] = real food items (lime, tomato, garlic). flavors[] = taste words (spicy, smoky).
+   Never put spicy/hot in ingredients. Never put dish names (taco, chili) in ingredients.
+3. "ground beef" → protein=beef. "spicy ground beef" → protein=beef, flavors=[spicy].
+4. protein = explicit protein only; null if not stated (UI will offer a protein filter).
+5. protein+ingredients without a dish → search_mode=protein or ingredient.
+6. main_query = short summary of the craving.
 """
 
 PROTEINS = (
@@ -53,8 +54,9 @@ STARCHES = (
 INGREDIENT_HINTS = (
     "lime", "lemon", "garlic", "onion", "tomato", "cilantro", "basil", "cheese",
     "rice", "beans", "avocado", "pepper", "mushroom", "spinach", "broccoli",
-    "corn", "potato", "cream", "butter", "honey", "ginger", "cumin", "chili",
+    "corn", "potato", "cream", "butter", "honey", "ginger", "cumin",
 )
+FLAVOR_HINTS = ("spicy", "hot", "smoky", "tangy", "mild", "crispy", "creamy")
 
 MOODS = {
     "light": ("light", "fresh", "healthy", "simple"),
@@ -98,10 +100,13 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         dish_anchor = str(dish_anchor).lower().strip()
 
     dish_queries = [str(q).strip() for q in (raw.get("dish_queries") or []) if q]
-    ingredients = [str(i).lower().strip() for i in (raw.get("ingredients") or []) if i]
+    ingredients = [
+        str(i).lower().strip() for i in (raw.get("ingredients") or [])
+        if i and str(i).lower().strip() not in FLAVOR_WORDS
+    ]
+    flavors = [str(f).lower().strip() for f in (raw.get("flavors") or []) if f]
 
     starches = [str(s).lower().strip() for s in (raw.get("starches") or []) if s]
-    flavors = [str(f).lower().strip() for f in (raw.get("flavors") or []) if f]
     search_terms = [str(t).lower().strip() for t in (raw.get("search_terms") or []) if t]
 
     cuisine = raw.get("cuisine")
@@ -162,11 +167,18 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
     return result
 
 
+def _detect_protein(text: str) -> str | None:
+    lower = text.lower()
+    if re.search(r"\bground\s+beef\b", lower):
+        return "beef"
+    return next((p for p in PROTEINS if re.search(rf"\b{re.escape(p)}\b", lower)), None)
+
+
 def mock_parse_craving(text: str) -> dict[str, Any]:
     lower = text.lower()
-    protein = next((p for p in PROTEINS if re.search(rf"\b{re.escape(p)}\b", lower)), None)
+    protein = _detect_protein(text)
     starches = [s for s in STARCHES if re.search(rf"\b{re.escape(s)}\b", lower)]
-    flavors = [f for f in ("garlic", "lemon", "basil", "tomato", "cheese", "spicy") if f in lower]
+    flavors = [f for f in FLAVOR_HINTS if re.search(rf"\b{re.escape(f)}\b", lower)]
 
     mood = None
     for mood_key, words in MOODS.items():
@@ -181,11 +193,12 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
             break
 
     dish_anchor, dish_queries = detect_dish_anchor(text)
+    dish_words = set(dish_queries) | ({dish_anchor.replace("_", " ")} if dish_anchor else set())
+
     ingredients = [
         i for i in INGREDIENT_HINTS
-        if re.search(rf"\b{re.escape(i)}\b", lower)
+        if re.search(rf"\b{re.escape(i)}\b", lower) and i not in dish_words
     ]
-    ingredients += [f for f in flavors if f not in ingredients]
     ingredients = list(dict.fromkeys(ingredients))
 
     if dish_anchor:
@@ -200,6 +213,7 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
     search_terms = list(dict.fromkeys(
         ([protein] if protein else [])
         + ingredients
+        + flavors
         + starches
         + dish_queries[:3]
         + [w for w in re.findall(r"[a-z]{3,}", lower) if w not in ("something", "with", "and", "the", "want")]

@@ -426,6 +426,7 @@ async def complex_search(
     sort_direction: str | None = None,
     include_ingredients: str | None = None,
     fill_ingredients: bool = False,
+    cuisine: str | None = None,
 ) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "query": query,
@@ -447,6 +448,8 @@ async def complex_search(
         params["sortDirection"] = sort_direction
     if include_ingredients:
         params["includeIngredients"] = include_ingredients
+    if cuisine:
+        params["cuisine"] = cuisine
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         data = await _request(client, "/recipes/complexSearch", params=params)
@@ -470,10 +473,16 @@ async def search_by_craving(
     *,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
+    what_sounds_good: str = "",
 ) -> dict[str, Any]:
     from app.services.craving_fetch import fetch_live_candidates
 
     diets = diets or []
     intolerances = intolerances or []
-    candidates = await fetch_live_candidates(parsed, diets=diets, intolerances=intolerances)
+    candidates = await fetch_live_candidates(
+        parsed,
+        diets=diets,
+        intolerances=intolerances,
+        what_sounds_good=what_sounds_good,
+    )
     return {"candidates": candidates}

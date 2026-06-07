@@ -73,7 +73,10 @@ async def search_by_craving(
 
         try:
             result = await spoonacular.search_by_craving(
-                parsed, diets=diets, intolerances=intolerances
+                parsed,
+                diets=diets,
+                intolerances=intolerances,
+                what_sounds_good=what_sounds_good,
             )
             candidates = result.get("candidates") or []
             search_mock = False

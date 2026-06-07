@@ -415,6 +415,70 @@ MOCK_RECIPES: list[dict[str, Any]] = [
         "instructions": ["Sear shrimp.", "Toss slaw with lime.", "Fill tortillas and drizzle crema."],
     },
     {
+        "id": 1027,
+        "title": "Spicy Beef Chili",
+        "image": "https://images.unsplash.com/photo-1608897013039-53f4c1bc2b86?w=400",
+        "summary": "Hearty beef chili with beans, tomato, and a spicy kick.",
+        "ready_in_minutes": 45,
+        "servings": 6,
+        "diets": ["gluten-free", "dairy-free"],
+        "intolerance_conflicts": [],
+        "health_friendly": ["anti-inflammatory"],
+        "required": ["beef", "beans", "tomato", "onion", "garlic", "chili", "cumin", "pepper"],
+        "source_url": "https://example.com/spicy-beef-chili",
+        "video_url": None,
+        "instructions": ["Brown ground beef.", "Simmer with beans, tomato, and spices.", "Serve hot."],
+        "popularity": 920,
+    },
+    {
+        "id": 1028,
+        "title": "Ground Beef Tacos",
+        "image": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=400",
+        "summary": "Classic seasoned ground beef tacos with lettuce and cheese.",
+        "ready_in_minutes": 20,
+        "servings": 4,
+        "diets": [],
+        "intolerance_conflicts": ["dairy", "gluten", "grain"],
+        "health_friendly": [],
+        "required": ["beef", "tortilla", "lettuce", "cheese", "tomato", "onion", "cumin"],
+        "source_url": "https://example.com/ground-beef-tacos",
+        "video_url": None,
+        "instructions": ["Cook seasoned ground beef.", "Warm tortillas.", "Assemble tacos."],
+        "popularity": 880,
+    },
+    {
+        "id": 1029,
+        "title": "Turkey Chili",
+        "image": "https://images.unsplash.com/photo-1608897013039-53f4c1bc2b86?w=400",
+        "summary": "Lean turkey chili with kidney beans and smoky spices.",
+        "ready_in_minutes": 40,
+        "servings": 5,
+        "diets": ["gluten-free", "dairy-free"],
+        "intolerance_conflicts": [],
+        "health_friendly": ["cardiac", "low-cholesterol"],
+        "required": ["turkey", "beans", "tomato", "onion", "garlic", "cumin", "chili"],
+        "source_url": "https://example.com/turkey-chili",
+        "video_url": None,
+        "instructions": ["Brown turkey.", "Add beans and tomato.", "Simmer until thick."],
+        "popularity": 760,
+    },
+    {
+        "id": 1030,
+        "title": "Beef Nachos Supreme",
+        "image": "https://images.unsplash.com/photo-1513456852971-3b5a55ff879c?w=400",
+        "summary": "Loaded nachos with seasoned ground beef, cheese, and jalapeños.",
+        "ready_in_minutes": 25,
+        "servings": 4,
+        "diets": [],
+        "intolerance_conflicts": ["dairy", "gluten", "grain"],
+        "health_friendly": [],
+        "required": ["beef", "cheese", "tomato", "onion", "jalapeño", "cumin"],
+        "source_url": "https://example.com/beef-nachos",
+        "video_url": None,
+        "instructions": ["Layer chips with beef and cheese.", "Bake until melted.", "Top with tomato and jalapeño."],
+        "popularity": 840,
+    },
+    {
         "id": 1026,
         "title": "Cheese Quesadilla",
         "image": "https://images.unsplash.com/photo-1618040996337-56904b7850b9?w=400",
@@ -803,10 +867,11 @@ def _score_mock_recipe(
     parsed: dict[str, Any],
     what_sounds_good: str,
 ) -> int:
-    from app.services.dish_families import dish_keywords, matches_dish_family
+    from app.services.dish_families import dish_keywords, matches_dish_family, mentions_protein
 
     blob = _craving_blob(recipe)
     protein = (parsed.get("protein") or "").lower()
+    flavors = [f.lower() for f in (parsed.get("flavors") or [])]
     search_mode = (parsed.get("search_mode") or "general").lower()
     dish_anchor = parsed.get("dish_anchor")
     starches = [s.lower() for s in parsed.get("starches") or []]
@@ -830,8 +895,11 @@ def _score_mock_recipe(
         for kw in dish_keywords(dish_anchor):
             if kw in blob:
                 score += 8
-    if protein and protein in blob:
+    if protein and mentions_protein(card, protein):
         score += 20
+    for flavor in flavors:
+        if flavor in blob or (flavor == "spicy" and any(w in blob for w in ("spicy", "chili", "hot", "cayenne"))):
+            score += 8
     for ing in ingredients:
         if ing in blob:
             score += 10
@@ -870,6 +938,9 @@ def mock_craving_candidates(
     intolerances = intolerances or []
     health_conditions = health_conditions or []
 
+    dish_anchor = parsed.get("dish_anchor")
+    dish_queries = [q.lower() for q in (parsed.get("dish_queries") or [])]
+
     scored: list[tuple[dict[str, Any], int]] = []
     for recipe in MOCK_RECIPES:
         if not _recipe_matches_diets(recipe, diets):
@@ -887,9 +958,15 @@ def mock_craving_candidates(
         )
         if score < 0:
             continue
-        if score == 0 and not parsed.get("dish_anchor"):
+        if score <= 0:
             continue
-        scored.append((_mock_card(recipe, category), score))
+        card = _mock_card(recipe, category)
+        if dish_anchor and dish_queries:
+            from app.services.dish_families import matches_dish_family
+
+            if matches_dish_family(card, dish_anchor):
+                card["source_queries"] = dish_queries[:3]
+        scored.append((card, score))
 
     scored.sort(key=lambda x: x[1], reverse=True)
     return [card for card, _ in scored[:60]]

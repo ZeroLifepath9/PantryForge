@@ -226,6 +226,7 @@ function bindMealCards(container) {
 function dishFamilyLabel(anchor) {
   const labels = {
     taco: "Tacos & adjacents",
+    chili: "Chili recipes",
     pasta: "Pasta dishes",
     pizza: "Pizza & flatbreads",
     burger: "Burgers",
