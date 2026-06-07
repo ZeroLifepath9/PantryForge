@@ -282,8 +282,7 @@ textarea { resize: vertical; min-height: 5rem; }
   margin: 0;
 }
 
-.results-tab,
-.recipe-tab {
+.results-tab {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -292,9 +291,18 @@ textarea { resize: vertical; min-height: 5rem; }
   padding: 1rem 1.25rem 2rem;
 }
 
-.results-tab.hidden,
-.recipe-tab.hidden {
+.results-tab.hidden {
   display: none;
+}
+
+.results-tab-pane.hidden {
+  display: none;
+}
+
+.tab-back {
+  display: block;
+  margin-bottom: 0.35rem;
+  padding-left: 0;
 }
 
 .tab-header {
@@ -332,10 +340,19 @@ textarea { resize: vertical; min-height: 5rem; }
   color: var(--accent);
 }
 
-.results-tab .meal-card-grid,
-.results-tab .selection-bar,
-.results-tab .chef-results-insight,
-.results-tab .parsed-chips {
+.results-tab-pane .meal-card-grid,
+.results-tab-pane .selection-bar,
+.results-tab-pane .chef-results-insight,
+.results-tab-pane .parsed-chips,
+.results-tab-pane .recipe-steps,
+.results-tab-pane .link-row,
+.results-tab-pane .step-mode-row {
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.results-tab-pane .tab-header {
   max-width: 960px;
   margin-left: auto;
   margin-right: auto;

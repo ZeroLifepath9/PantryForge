@@ -157,16 +157,33 @@ async function savePreferences() {
   }
 }
 
+function showResultsListPane() {
+  $("results-list-pane")?.classList.remove("hidden");
+  $("results-recipe-pane")?.classList.add("hidden");
+}
+
+function showResultsRecipePane() {
+  $("results-list-pane")?.classList.add("hidden");
+  $("results-recipe-pane")?.classList.remove("hidden");
+}
+
 function closeResultsTab() {
   $("results-tab")?.classList.add("hidden");
+  showResultsListPane();
+  $("search-panel")?.classList.remove("hidden");
 }
 
 function openResultsTab() {
   $("results-tab")?.classList.remove("hidden");
+  showResultsListPane();
 }
 
 function closeRecipeTab() {
-  $("recipe-tab")?.classList.add("hidden");
+  closeResultsTab();
+}
+
+function backToResultsList() {
+  showResultsListPane();
 }
 
 function hideAllPanels() {
@@ -178,7 +195,6 @@ function hideAllPanels() {
     "cook-panel",
   ].forEach((id) => $(id)?.classList.add("hidden"));
   closeResultsTab();
-  closeRecipeTab();
 }
 
 function showLanding() {
@@ -265,10 +281,21 @@ function renderMealCard(recipe) {
 
 function updateSelectionUI() {
   const count = selectedIds.size;
-  $("selection-count").textContent = count
-    ? `${count} of ${MAX_RECIPE_SELECT} selected — lineup refines as you pick`
-    : `Select up to ${MAX_RECIPE_SELECT} — the chef refines pairings around your picks.`;
-  $("inspired-btn").disabled = count === 0;
+  const inspireBtn = $("inspired-btn");
+  if (count === 0) {
+    $("selection-count").textContent =
+      "Click a card for AI steps. Select 2–5 meals to build your inspire dash.";
+  } else if (count === 1) {
+    $("selection-count").textContent =
+      "1 selected — pick at least one more to build your inspire dash.";
+  } else {
+    $("selection-count").textContent = `${count} of ${MAX_RECIPE_SELECT} selected — lineup refines as you pick.`;
+  }
+  if (inspireBtn) {
+    const showInspire = count >= 2;
+    inspireBtn.classList.toggle("hidden", !showInspire);
+    inspireBtn.disabled = !showInspire;
+  }
 }
 
 function scheduleLineupRefine() {
@@ -822,7 +849,8 @@ async function flushPendingSave() {
 
 async function openRecipe(id) {
   currentRecipeId = id;
-  $("recipe-tab")?.classList.remove("hidden");
+  openResultsTab();
+  showResultsRecipePane();
   $("recipe-title").textContent = "Loading…";
   $("recipe-steps").innerHTML = "<li class='hint'>Chef is writing your steps…</li>";
   try {
@@ -1008,7 +1036,8 @@ $("re-pitch-btn")?.addEventListener("click", async () => {
 $("save-recipe-btn")?.addEventListener("click", saveCurrentRecipe);
 
 $("close-results-tab")?.addEventListener("click", closeResultsTab);
-$("close-recipe-tab")?.addEventListener("click", closeRecipeTab);
+$("close-recipe-tab")?.addEventListener("click", closeResultsTab);
+$("back-to-results-list")?.addEventListener("click", backToResultsList);
 
 $("back-to-results")?.addEventListener("click", () => {
   $("inspired-panel").classList.add("hidden");
