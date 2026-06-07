@@ -90,19 +90,26 @@ def build_search_queries(parsed: dict[str, Any], what_sounds_good: str) -> list[
 
     elif flavors or ingredients:
         if flavors and ingredients:
-            add(f"{flavors[0]} {ingredients[0]}")
+            f0, i0 = flavors[0], ingredients[0]
+            if f0.replace("y", "") not in i0 and i0 not in f0:
+                add(f"{f0} {i0}")
         for flavor in flavors[:3]:
             add(f"{flavor} recipe")
             if mood:
                 add(f"{mood} {flavor}")
         for ing in ingredients[:4]:
+            add(ing)
             add(f"{ing} recipe")
-            add(f"easy {ing}")
         if "cheese" in ingredients or "cheesy" in flavors:
+            add("cheese")
             add("mac and cheese")
             add("cheesy pasta")
-            add("cheesy casserole")
-        if mood:
+            add("baked pasta")
+            add("casserole")
+        if mood == "comfort":
+            for q in ("bake", "casserole", "soup", "stew", "pasta"):
+                add(q)
+        elif mood:
             for q in _MOOD_SEARCHES.get(mood, [])[:4]:
                 add(q)
 

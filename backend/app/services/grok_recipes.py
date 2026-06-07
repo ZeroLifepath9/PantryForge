@@ -8,14 +8,10 @@ import re
 from typing import Any
 
 from app.config import settings
-from app.services.allrecipes_scraper import (
-    fetch_recipe_page,
-    fetch_recipes_parallel,
-    gather_search_hits,
-    url_to_recipe_id,
-)
+from app.services.allrecipes_scraper import fetch_recipes_parallel
 from app.services.chef_relevance import collect_match_terms, is_relevant_main
 from app.services.craving_translator import translate_craving
+from app.services.recipe_discovery import discover_recipe_hits
 from app.services.grok_recipe_store import put_many
 from app.services.xai_client import chat_completion
 
@@ -220,11 +216,26 @@ async def search_craving_lineup(
     queries = _search_queries(plan)
     if not queries:
         queries = [what_sounds_good.strip()[:40]] if what_sounds_good.strip() else ["dinner"]
-    hits = await gather_search_hits(queries, per_query=14)
+
+    hits, recipe_source = await discover_recipe_hits(
+        queries,
+        per_query=14,
+        diets=diets,
+        intolerances=intolerances,
+    )
     if hits:
-        hits = _filter_hits(hits, plan, what_sounds_good)
+        filtered = _filter_hits(hits, plan, what_sounds_good)
+        hits = filtered if filtered else hits
     if not hits:
-        hits = await gather_search_hits(queries[:3], per_query=20)
+        hits, recipe_source = await discover_recipe_hits(
+            queries[:3],
+            per_query=20,
+            diets=diets,
+            intolerances=intolerances,
+        )
+        if hits:
+            filtered = _filter_hits(hits, plan, what_sounds_good)
+            hits = filtered if filtered else hits
     hits.sort(
         key=lambda h: (
             -(h.get("rating_count") or 0),
@@ -236,7 +247,8 @@ async def search_craving_lineup(
     picks: list[dict[str, Any]] = []
     used_grok = False
 
-    if settings.xai_key and hits:
+    url_based = recipe_source in ("allrecipes", "allrecipes-ddg")
+    if settings.xai_key and hits and url_based:
         try:
             grok_data, picks = await _grok_pick_lineup(
                 hits,
@@ -255,12 +267,15 @@ async def search_craving_lineup(
     if not picks:
         picks = _fallback_pick(hits, limit=PAGE_SIZE)
 
-    # Fetch full recipe pages from AllRecipes
-    urls = [p["url"] for p in picks if p.get("url")]
-    cards = await fetch_recipes_parallel(urls[:PAGE_SIZE + 4])
+    full_picks = [p for p in picks if p.get("_full_card")]
+    url_picks = [p for p in picks if p.get("url") and not p.get("_full_card")]
+    cards: list[dict[str, Any]] = list(full_picks)
+    if url_picks:
+        urls = [p["url"] for p in url_picks]
+        cards.extend(await fetch_recipes_parallel(urls[:PAGE_SIZE + 4]))
 
     # Merge judge notes onto cards
-    meta_by_url = {p["url"]: p for p in picks}
+    meta_by_url = {p["url"]: p for p in picks if p.get("url")}
     lineup: list[dict[str, Any]] = []
     for card in cards:
         url = card.get("source_url") or ""
@@ -320,15 +335,23 @@ async def search_craving_lineup(
         "protein_options": plan.get("protein_options") or [],
     }
 
+    source_labels = {
+        "allrecipes": "AllRecipes",
+        "allrecipes-ddg": "AllRecipes",
+        "themealdb": "TheMealDB",
+        "spoonacular": "Spoonacular",
+    }
+    src_label = source_labels.get(recipe_source, "recipe search")
+
     live = bool(settings.xai_key) and used_grok and bool(lineup)
     if not lineup:
-        message = "No AllRecipes matches for that search — try different keywords or loosen filters."
-    elif not settings.xai_key:
-        message = f"{len(lineup)} real recipes from AllRecipes. Set XAI_API_KEY for chef-judge curation."
+        message = "No matches found — try a simpler craving like chicken, pasta, or cheesy comfort food."
     elif live:
-        message = f"{len(lineup)} real AllRecipes mains — curated by your chef judge."
+        message = f"{len(lineup)} {src_label} mains — curated by your chef judge."
+    elif recipe_source == "themealdb":
+        message = f"{len(lineup)} popular recipes matching your craving (TheMealDB)."
     else:
-        message = f"{len(lineup)} real recipes from AllRecipes matching your search."
+        message = f"{len(lineup)} recipes from {src_label} matching your search."
 
     return {
         "what_sounds_good": what_sounds_good,
@@ -341,6 +364,7 @@ async def search_craving_lineup(
         "page_size": PAGE_SIZE,
         "popular_top": 3,
         "candidate_count": len(hits),
+        "recipe_source": recipe_source,
         "message": message,
         "live": live,
         "refined": bool(selected_recipe_ids),
