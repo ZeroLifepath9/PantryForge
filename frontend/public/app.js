@@ -531,10 +531,17 @@ function renderParsedCraving(parsed) {
     return;
   }
   const chips = [];
-  for (const th of parsed.craving_threads || []) {
-    if (th.label) chips.push(th.label);
+  for (const term of parsed.search_terms || []) {
+    if (term) chips.push(term);
   }
-  if (parsed.shared_bridge?.label) chips.push(`+ ${parsed.shared_bridge.label}`);
+  for (const note of parsed.flavor_notes || []) {
+    if (note) chips.push(note);
+  }
+  if (!chips.length) {
+    for (const th of parsed.craving_threads || []) {
+      if (th.label) chips.push(th.label);
+    }
+  }
   if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
   if (parsed.cuisine) chips.push(`Cuisine: ${parsed.cuisine}`);
   for (const c of selectedCuisines()) {
@@ -580,7 +587,7 @@ function renderCravingResults(data, opts = {}) {
   const list = $("recipes-list");
 
   if (!total) {
-    list.innerHTML = `<p class="hint">No matches. Try tacos, pasta, chicken, or loosen diet filters.</p>`;
+    list.innerHTML = `<p class="hint">No matches. Try different keywords or loosen diet filters.</p>`;
     updateSelectionUI();
     return;
   }

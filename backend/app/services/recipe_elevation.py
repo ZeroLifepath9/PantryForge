@@ -326,10 +326,11 @@ async def build_cook_kit(
 
     title = steps_result["title"]
     anchor = dish_anchor or _detect_anchor(title, what_sounds_good)
-    plan_stub = {"dish_anchor": anchor, "pairing_cites": {}}
+    plan_stub = {"dish_anchor": anchor, "pairing_cites": {}, "what_sounds_good": what_sounds_good or ""}
     accent = await pick_accent_side_from_allrecipes(
         dish_anchor=anchor,
         main_title=title,
+        what_sounds_good=what_sounds_good or "",
         side_filters=side_filters,
         diets=diets,
         intolerances=intolerances,

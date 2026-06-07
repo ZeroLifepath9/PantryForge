@@ -16,7 +16,7 @@ from app.services.allrecipes_scraper import (
 )
 from app.services.chef_agent import analyze_craving
 from app.services.chef_relevance import collect_match_terms, is_relevant_main
-from app.services.dish_families import detect_dish_anchor, family_adjacent_queries
+from app.services.dish_families import detect_dish_anchor
 from app.services.grok_recipe_store import put_many
 from app.services.xai_client import chat_completion
 
@@ -27,26 +27,28 @@ PAGE_SIZE = 12
 GROK_PICK = """You are the executive chef judge on a reality cooking competition (Top Chef / Iron Chef energy).
 
 The home cook told you what sounds good. You receive REAL recipes scraped from AllRecipes.com — titles and URLs only.
-Your job: pick exactly 12 MAIN COURSES that nail their craving and respect every filter.
+Your job: pick up to 12 MAIN COURSES that nail their exact craving and respect every filter.
 
 Output ONLY valid JSON:
 {
-  "chef_headline": "one punchy judge line tied to their exact craving",
-  "chef_intro": "2-3 sentences — competition energy, why this lineup is the right spread",
+  "chef_headline": "one punchy judge line tied to their exact words",
+  "chef_intro": "2-3 sentences — why this lineup matches what they actually said",
   "picks": [
     {
       "url": "must be an exact URL from the list",
-      "fit_note": "judge commentary: why THIS dish wins for what they said (street vs home, protein, vibe)",
-      "thread_label": "short tag e.g. Street tacos | Pasta night"
+      "fit_note": "judge commentary citing their craving words — why THIS dish fits",
+      "thread_label": "short style tag from the recipe title e.g. Roast chicken | Lemon pasta"
     }
   ]
 }
 
 RULES:
-- Exactly 12 picks. URLs must come from the provided list — do not invent recipes.
+- Up to 12 picks. URLs must come from the provided list — do not invent recipes.
 - Reject sauces-only, dips, news articles, grocery promos, unrelated dishes.
-- Every pick must clearly match what_sounds_good and filters.
-- Spread styles when the craving allows (street + home + regional)."""
+- Every pick must clearly match what_sounds_good — if you cannot tie it to their words, skip it.
+- Prefer popular home-cook hits (higher rating_count when available).
+- NEVER mention tacos, street food, or Mexican dishes unless what_sounds_good contains those concepts.
+- Do not pad with unrelated recipes to reach 12 — fewer strong picks beats filler."""
 
 _STOP = frozenset({
     "something", "with", "and", "the", "for", "that", "good", "sounds", "like",
@@ -73,11 +75,10 @@ def _search_queries(what_sounds_good: str, plan: dict[str, Any]) -> list[str]:
             queries.append(q)
 
     add(what_sounds_good[:80])
-    anchor, _ = detect_dish_anchor(what_sounds_good)
-    for term in family_adjacent_queries(anchor)[:6]:
-        add(term)
+    for term in plan.get("search_terms") or []:
+        add(str(term))
     for thread in plan.get("craving_threads") or []:
-        for term in (thread.get("search_terms") or [])[:4]:
+        for term in (thread.get("search_terms") or [])[:6]:
             add(str(term))
     protein = plan.get("protein")
     if protein and protein != "vegetarian":
@@ -197,6 +198,9 @@ async def search_craving_lineup(
     selected_recipe_ids = (selected_recipe_ids or [])[:5]
 
     plan, _ = await analyze_craving(what_sounds_good, protein_filter=protein_filter)
+    anchor, _ = detect_dish_anchor(what_sounds_good)
+    plan["user_dish_anchor"] = bool(anchor)
+    plan["dish_anchor"] = anchor
     if protein_filters:
         plan["protein"] = protein_filters[0]
     if cuisine_filters:
@@ -209,6 +213,12 @@ async def search_craving_lineup(
     queries = _search_queries(what_sounds_good, plan)
     hits = await gather_search_hits(queries, per_query=14)
     hits = _filter_hits(hits, plan, what_sounds_good)
+    hits.sort(
+        key=lambda h: (
+            -(h.get("rating_count") or 0),
+            -(h.get("rating") or 0),
+        ),
+    )
 
     grok_data: dict[str, Any] = {}
     picks: list[dict[str, Any]] = []
@@ -267,18 +277,17 @@ async def search_craving_lineup(
     lineup = lineup[:PAGE_SIZE]
     put_many(lineup)
 
-    anchor, _ = detect_dish_anchor(what_sounds_good)
     threads = plan.get("craving_threads") or []
     parsed = {
         "search_mode": "grok_allrecipes",
         "craving_threads": threads,
-        "shared_bridge": plan.get("shared_bridge"),
-        "dish_anchor": anchor,
+        "dish_anchor": anchor if plan.get("user_dish_anchor") else None,
         "dish_queries": queries,
         "protein": plan.get("protein"),
         "cuisine": plan.get("cuisine"),
+        "flavor_notes": plan.get("flavor_notes") or [],
         "main_query": what_sounds_good,
-        "search_terms": queries,
+        "search_terms": plan.get("search_terms") or queries,
         "needs_protein_prompt": not plan.get("protein"),
         "protein_options": plan.get("protein_options") or [],
     }
@@ -300,7 +309,6 @@ async def search_craving_lineup(
         "chef_headline": grok_data.get("chef_headline") or plan.get("chef_headline"),
         "chef_intro": grok_data.get("chef_intro") or plan.get("chef_intro"),
         "craving_threads": threads,
-        "shared_bridge": plan.get("shared_bridge"),
         "page_size": PAGE_SIZE,
         "popular_top": 3,
         "candidate_count": len(hits),

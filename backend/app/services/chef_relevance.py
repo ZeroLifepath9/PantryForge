@@ -9,7 +9,6 @@ from app.services.dish_families import (
     cuisine_for_anchor,
     detect_dish_anchor,
     dish_keywords,
-    family_adjacent_queries,
     matches_dish_family,
     mentions_protein,
 )
@@ -143,45 +142,32 @@ def enrich_search_plan(
     side_filters: list[str] | None = None,
     cuisine_filters: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Add dish anchor, family adjacents, street-food queries, and pairing terms."""
+    """Attach prompt metadata — no injected street-food or family expansion."""
     plan = dict(plan)
-    anchor, family_queries = detect_dish_anchor(what_sounds_good)
-    plan["dish_anchor"] = anchor
+    anchor, _ = detect_dish_anchor(what_sounds_good)
+    plan["user_dish_anchor"] = bool(anchor)
+    plan["dish_anchor"] = anchor if anchor else None
     plan["what_sounds_good"] = what_sounds_good
     plan["cuisine_filters"] = [c.strip().lower() for c in (cuisine_filters or []) if c]
-
-    adjacent = family_adjacent_queries(anchor)
-    plan["family_adjacent_queries"] = adjacent
-
-    for thread in plan.get("craving_threads") or []:
-        terms = list(thread.get("search_terms") or [])
-        if anchor and anchor in STREET_FOOD_TERMS:
-            for st in STREET_FOOD_TERMS[anchor][:4]:
-                if st not in terms:
-                    terms.insert(0, st)
-        for fq in (family_queries or []) + adjacent:
-            if fq not in terms:
-                terms.append(fq)
-        thread["search_terms"] = terms[:14]
-
-    street_terms: list[str] = []
-    if anchor and anchor in STREET_FOOD_TERMS:
-        street_terms = list(STREET_FOOD_TERMS[anchor])
-    plan["street_food_terms"] = street_terms
+    plan["search_terms"] = list(plan.get("search_terms") or [])
+    plan["street_food_terms"] = []
 
     pairing_terms: list[str] = list(plan.get("pairing_side_terms") or [])
     pairing_cites: dict[str, str] = dict(plan.get("pairing_cites") or {})
-
-    accent_pool = list(PAIRING_ACCENTS.get(anchor or "", [])) + list(GENERIC_PAIRING_SIDES)
-    for term, cite in accent_pool:
+    if anchor and plan.get("user_dish_anchor"):
+        for term, cite in PAIRING_ACCENTS.get(anchor, []):
+            if term not in pairing_terms:
+                pairing_terms.append(term)
+            pairing_cites[term] = cite
+    for term, cite in GENERIC_PAIRING_SIDES:
         if term not in pairing_terms:
             pairing_terms.append(term)
-        pairing_cites[term] = cite
+        pairing_cites.setdefault(term, cite)
 
     for sf in side_filters or []:
         if sf and sf not in pairing_terms:
             pairing_terms.insert(0, sf)
-            pairing_cites[sf] = f"your chosen side — accents the main"
+            pairing_cites[sf] = "your chosen side — accents the main"
 
     plan["pairing_side_terms"] = pairing_terms[:14]
     plan["pairing_cites"] = pairing_cites
@@ -200,17 +186,16 @@ def collect_match_terms(plan: dict[str, Any], what_sounds_good: str) -> list[str
 
     for w in _query_words(what_sounds_good):
         add(w)
+    for term in plan.get("search_terms") or []:
+        add(str(term))
     for thread in plan.get("craving_threads") or []:
         for term in thread.get("search_terms") or []:
             add(str(term))
-    for term in plan.get("street_food_terms") or []:
-        add(str(term))
-    for term in plan.get("family_adjacent_queries") or []:
-        add(str(term))
-    anchor = plan.get("dish_anchor")
-    if anchor:
-        for kw in dish_keywords(anchor):
-            add(kw)
+    if plan.get("user_dish_anchor"):
+        anchor = plan.get("dish_anchor")
+        if anchor:
+            for kw in dish_keywords(anchor):
+                add(kw)
     return sorted(out, key=len, reverse=True)
 
 
@@ -225,7 +210,7 @@ def is_relevant_main(
         return False, ""
 
     title = (card.get("title") or "").lower()
-    anchor = plan.get("dish_anchor")
+    anchor = plan.get("dish_anchor") if plan.get("user_dish_anchor") else None
     cuisine_filters = plan.get("cuisine_filters") or []
 
     if cuisine_filters and not _matches_cuisine(card, cuisine_filters, dish_anchor=anchor):
@@ -274,7 +259,7 @@ def score_candidate(
 ) -> float:
     blob = _blob(card)
     score = 0.0
-    anchor = plan.get("dish_anchor")
+    anchor = plan.get("dish_anchor") if plan.get("user_dish_anchor") else None
     category = card.get("category") or "main"
     is_side = category in ("side", "salad", "dip")
 
@@ -297,10 +282,6 @@ def score_candidate(
                 if len(word) > 3 and word in blob:
                     score += 2.0
 
-    for term in plan.get("street_food_terms") or []:
-        if str(term).lower() in blob:
-            score += 10.0
-
     for term in plan.get("pairing_side_terms") or []:
         if str(term).lower() in blob:
             score += 5.0 if is_side else 1.0
@@ -313,10 +294,7 @@ def score_candidate(
         if word in blob:
             score += 4.0
 
-    if "street" in blob or "food truck" in blob:
-        score += 6.0
-
-    pop = card.get("popularity") or card.get("aggregate_likes") or 0
+    pop = card.get("popularity") or card.get("aggregate_likes") or card.get("rating_count") or 0
     try:
         score += min(float(pop) / 50.0, 15.0)
     except (TypeError, ValueError):
@@ -326,7 +304,6 @@ def score_candidate(
         score += 4.0
 
     cuisine_filters = plan.get("cuisine_filters") or []
-    anchor = plan.get("dish_anchor")
     if cuisine_filters:
         if _matches_cuisine(card, cuisine_filters, dish_anchor=anchor):
             score += 16.0

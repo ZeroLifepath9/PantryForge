@@ -13,42 +13,28 @@ PROTEIN_OPTIONS = [
     "chicken", "beef", "pork", "shrimp", "fish", "salmon", "tofu", "turkey", "lamb", "vegetarian",
 ]
 
-CHEF_ANALYZE = """You are an executive chef at the absolute peak of the profession — AlchemyPantry's culinary brain.
+CHEF_ANALYZE = """You are an executive chef — AlchemyPantry's culinary brain.
 
-The home cook says what sounds good. You interpret like a chef, not a search engine.
-Think street food, food trucks, regional icons, AND home versions. Every search term must be something Spoonacular would actually return.
+The home cook says what sounds good in their own words. Parse ONLY what they said.
+Every search term must be something AllRecipes.com would return as a main-course recipe.
 
 Output ONLY valid JSON:
 {
-  "chef_headline": "one vivid line tied to THEIR exact craving",
-  "chef_intro": "2-3 sentences: you will show street-style + popular home versions across the full dish family (taco → burrito, fajita, quesadilla, etc.)",
-  "craving_threads": [
-    {
-      "label": "short name e.g. Tacos",
-      "search_terms": ["8-10 concrete queries: street taco, birria, al pastor, fish taco, carnitas, burrito, ..."],
-      "chef_note": "one sentence why this thread matches what they said"
-    }
-  ],
-  "shared_bridge": {
-    "label": "accent they didn't ask for but pros always add",
-    "search_terms": ["2-4 queries for that bridge dish/side"],
-    "chef_note": "cite the flavor logic — acid/fat/crunch/heat link"
-  },
-  "street_food_terms": ["4-6 street-food or food-truck style queries matching the craving"],
-  "pairing_side_terms": ["6-10 EASY popular sides/salads — pico, elote, beans, slaw, rice, pickles, etc."],
-  "pairing_cites": {
-    "exact side search term": "one line: why this ACCENTS the main (acid cuts fat, crunch vs soft, etc.)"
-  },
+  "chef_headline": "one vivid line tied to THEIR exact words",
+  "chef_intro": "2-3 sentences: you will find popular home-cook mains that match what they said — no assumptions beyond their prompt",
+  "search_terms": ["6-10 concrete AllRecipes search queries derived from their craving"],
+  "flavor_notes": ["optional mood words you read from their prompt: light, crispy, lemony, etc."],
   "protein": null,
   "protein_options": ["chicken","beef","pork","shrimp","fish","salmon","tofu","turkey","lamb","vegetarian"]
 }
 
 RULES:
-- search_terms must be tightly relevant to the user's words — no generic "dinner" or "food".
-- Include STREET variants (street taco, smash burger, pad thai cart style) when the craving fits.
-- pairing_side_terms = popular, easy sides a chef would actually plate alongside — not random salads.
-- pairing_cites: one entry per side term explaining the pairing chemistry.
-- Adjacent dishes count (tacos → burrito, fajita, quesadilla)."""
+- search_terms MUST trace to words or clear implications in what_sounds_good.
+- If they say "chicken" → chicken mains only (baked chicken, chicken parmesan, roast chicken, etc.) — NOT tacos or unrelated dishes.
+- If they say "tacos" → taco-related queries are allowed; you MAY add close adjacents (burrito, fajita) because they named tacos.
+- NEVER add taco, burrito, fajita, quesadilla, street food, food truck, taqueria, elote, birria, al pastor, or carnitas unless those concepts appear in what_sounds_good.
+- No generic queries like "dinner", "food", or "meal".
+- Do not invent cravings they did not express."""
 
 CHEF_CURATE = """You are the same executive chef. You receive Spoonacular MAIN-COURSE candidates PRE-SORTED by relevance, the chef plan, and what_sounds_good.
 
@@ -94,42 +80,25 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(cleaned)
 
 
-def _mock_pairing_terms(lower: str, threads: list[dict]) -> list[str]:
-    from app.services.chef_relevance import PAIRING_ACCENTS, GENERIC_PAIRING_SIDES
+_MOCK_STOP = frozenset({
+    "something", "with", "and", "the", "for", "that", "good", "sounds", "like",
+    "want", "some", "have", "what", "your", "side", "fresh", "food", "meal",
+    "easy", "popular", "recipe", "recipes", "warm", "nice",
+})
 
-    if "taco" in lower or any("taco" in t.get("label", "").lower() for t in threads):
-        pool = PAIRING_ACCENTS.get("taco", [])
-    elif "chili" in lower:
-        pool = PAIRING_ACCENTS.get("chili", [])
-    elif "pasta" in lower:
-        pool = PAIRING_ACCENTS.get("pasta", [])
-    elif "burger" in lower:
-        pool = PAIRING_ACCENTS.get("burger", [])
-    else:
-        pool = GENERIC_PAIRING_SIDES
-    return [t for t, _ in pool[:8]]
+_FORBIDDEN_UNLESS_IN_PROMPT = (
+    "street food", "food truck", "street taco", "street corn", "taqueria",
+    "taco", "burrito", "fajita", "quesadilla", "enchilada", "taquito",
+    "elote", "birria", "al pastor", "carnitas",
+)
 
 
-def _mock_pairing_cites(lower: str) -> dict[str, str]:
-    from app.services.chef_relevance import PAIRING_ACCENTS, GENERIC_PAIRING_SIDES
-
-    if "taco" in lower:
-        pool = PAIRING_ACCENTS.get("taco", [])
-    elif "chili" in lower:
-        pool = PAIRING_ACCENTS.get("chili", [])
-    else:
-        pool = GENERIC_PAIRING_SIDES
-    return {t: c for t, c in pool}
-
-
-def STREET_FROM_MOCK(lower: str, threads: list[dict]) -> list[str]:
-    from app.services.chef_relevance import STREET_FOOD_TERMS
-
-    if "taco" in lower or any("taco" in t.get("label", "").lower() for t in threads):
-        return STREET_FOOD_TERMS.get("taco", [])[:5]
-    if "burger" in lower:
-        return STREET_FOOD_TERMS.get("burger", [])[:4]
-    return []
+def _term_allowed(term: str, lower_prompt: str) -> bool:
+    tl = term.lower()
+    for forbidden in _FORBIDDEN_UNLESS_IN_PROMPT:
+        if forbidden in tl and forbidden not in lower_prompt:
+            return False
+    return True
 
 
 def _split_craving_threads(text: str) -> list[str]:
@@ -138,60 +107,84 @@ def _split_craving_threads(text: str) -> list[str]:
     return [p.strip() for p in parts if len(p.strip()) > 2]
 
 
+def _build_mock_search_terms(text: str, lower: str, protein: str | None) -> list[str]:
+    from app.services.dish_families import detect_dish_anchor
+
+    seen: set[str] = set()
+    terms: list[str] = []
+
+    def add(q: str) -> None:
+        q = q.strip()
+        if len(q) < 3 or q.lower() in seen:
+            return
+        if not _term_allowed(q, lower):
+            return
+        seen.add(q.lower())
+        terms.append(q)
+
+    if text:
+        add(text[:80])
+    words = [w for w in re.findall(r"[a-z]{3,}", lower) if w not in _MOCK_STOP]
+    for w in words[:5]:
+        add(w)
+        add(f"{w} recipe")
+    if protein and protein != "vegetarian":
+        add(f"{protein} dinner")
+        add(f"easy {protein}")
+        add(f"baked {protein}")
+    anchor, family_queries = detect_dish_anchor(text)
+    if anchor:
+        for fq in family_queries[:5]:
+            add(fq)
+    for part in _split_craving_threads(text)[:2]:
+        if len(part) > 3:
+            add(part[:50])
+    return terms[:12]
+
+
+def _normalize_plan(plan: dict[str, Any], what_sounds_good: str) -> dict[str, Any]:
+    from app.services.dish_families import detect_dish_anchor
+
+    plan = dict(plan)
+    lower = what_sounds_good.lower()
+    anchor, _ = detect_dish_anchor(what_sounds_good)
+    plan["user_dish_anchor"] = bool(anchor)
+    plan["dish_anchor"] = anchor
+
+    raw_terms: list[str] = list(plan.get("search_terms") or [])
+    if not raw_terms:
+        for thread in plan.get("craving_threads") or []:
+            raw_terms.extend(thread.get("search_terms") or [])
+
+    search_terms: list[str] = []
+    seen: set[str] = set()
+    for term in raw_terms:
+        t = str(term).strip()
+        if len(t) < 3 or t.lower() in seen:
+            continue
+        if not _term_allowed(t, lower):
+            continue
+        seen.add(t.lower())
+        search_terms.append(t)
+
+    if not search_terms:
+        search_terms = _build_mock_search_terms(what_sounds_good.strip(), lower, plan.get("protein"))
+
+    plan["search_terms"] = search_terms[:12]
+    label = what_sounds_good.strip()[:40].title() or "Your craving"
+    plan["craving_threads"] = [{
+        "label": label,
+        "search_terms": plan["search_terms"],
+        "chef_note": f"Searches grounded in «{what_sounds_good.strip()[:60]}».",
+    }]
+    plan.setdefault("flavor_notes", [])
+    plan.setdefault("protein_options", PROTEIN_OPTIONS)
+    return plan
+
+
 def mock_analyze(what_sounds_good: str, protein_filter: str | None = None) -> dict[str, Any]:
     text = what_sounds_good.strip()
     lower = text.lower()
-    parts = _split_craving_threads(text)
-    threads: list[dict[str, Any]] = []
-
-    dish_map = {
-        "taco": (
-            ["street taco", "birria taco", "al pastor", "fish taco", "carnitas", "carne asada taco", "burrito", "quesadilla"],
-            "Tacos & street food",
-        ),
-        "chili": (["chili", "beef chili", "texas chili", "turkey chili", "chili bowl"], "Chili"),
-        "pasta": (["pasta", "spaghetti", "carbonara", "cacio e pepe"], "Pasta"),
-        "pizza": (["pizza", "margherita pizza", "flatbread"], "Pizza"),
-        "burger": (["smash burger", "burger", "slider"], "Burgers"),
-        "salad": (["salad", "grain bowl"], "Salad"),
-        "soup": (["soup", "stew"], "Soup"),
-    }
-
-    used = set()
-    for part in parts[:3]:
-        matched = False
-        for key, (terms, label) in dish_map.items():
-            if key in part:
-                threads.append({
-                    "label": label,
-                    "search_terms": terms,
-                    "chef_note": f"A chef explores many {label.lower()} preparations for you.",
-                })
-                used.add(key)
-                matched = True
-                break
-        if not matched and len(part) > 3:
-            threads.append({
-                "label": part[:40].title(),
-                "search_terms": [part[:50], f"{part} recipe"],
-                "chef_note": f"Varied approaches to {part}.",
-            })
-
-    if not threads:
-        threads.append({
-            "label": "Your craving",
-            "search_terms": [text[:60], *parts[:2]] if parts else [text[:60]],
-            "chef_note": "Several preparations worth comparing.",
-        })
-
-    bridge_label = "Chef's bridge"
-    bridge_terms = ["rice", "pickled onions"]
-    if len(threads) >= 2:
-        bridge_label = "Shared accent — citrus & herbs"
-        bridge_terms = ["cilantro lime rice", "quick pickled onions", "avocado crema"]
-    elif "taco" in lower or any("taco" in t["label"].lower() for t in threads):
-        bridge_label = "Elote-style corn"
-        bridge_terms = ["mexican street corn", "elote", "cilantro lime rice"]
 
     protein = protein_filter
     if not protein:
@@ -200,25 +193,26 @@ def mock_analyze(what_sounds_good: str, protein_filter: str | None = None) -> di
                 protein = p
                 break
 
-    return {
-        "chef_headline": "Let me show you the full landscape",
+    search_terms = _build_mock_search_terms(text, lower, protein)
+    flavor_notes = [w for w in re.findall(r"[a-z]{4,}", lower) if w in {
+        "spicy", "mild", "smoky", "tangy", "zesty", "savory", "sweet", "creamy",
+        "crispy", "crunchy", "fresh", "rich", "bold", "light", "warm", "cheesy", "lemony",
+    }]
+
+    plan = {
+        "chef_headline": f"Popular picks for «{text[:60]}»" if text else "What sounds good?",
         "chef_intro": (
-            "I'm pulling main courses across every preparation style in the dish family — "
-            "street tacos, burritos, fajitas, and more. Select up to five and I'll refine the rest around your picks."
+            f"I'm searching AllRecipes for mains that match what you said"
+            f"{f' — «{text[:80]}»' if text else ''}. "
+            "Pick up to five favorites and I'll refine around your picks."
         ),
-        "craving_threads": threads,
-        "shared_bridge": {
-            "label": bridge_label,
-            "search_terms": bridge_terms,
-            "chef_note": "Something you didn't ask for — but it ties the plate together.",
-        },
-        "street_food_terms": STREET_FROM_MOCK(lower, threads),
-        "pairing_side_terms": _mock_pairing_terms(lower, threads),
-        "pairing_cites": _mock_pairing_cites(lower),
+        "search_terms": search_terms,
+        "flavor_notes": flavor_notes,
         "protein": protein,
         "protein_options": PROTEIN_OPTIONS,
         "protein_filter": protein_filter,
     }
+    return _normalize_plan(plan, text)
 
 
 async def analyze_craving(
@@ -240,10 +234,10 @@ async def analyze_craving(
     try:
         raw = await chat_completion(system=CHEF_ANALYZE, user_content=user, temperature=0.4)
         plan = _extract_json(raw)
-        plan.setdefault("protein_options", PROTEIN_OPTIONS)
         if protein_filter:
             plan["protein"] = None if protein_filter == "vegetarian" else protein_filter
             plan["protein_filter"] = protein_filter
+        plan = _normalize_plan(plan, what_sounds_good)
         return plan, False
     except Exception:
         plan = mock_analyze(what_sounds_good, protein_filter)

@@ -150,6 +150,7 @@ async def pick_accent_side_from_allrecipes(
     *,
     dish_anchor: str | None,
     main_title: str = "",
+    what_sounds_good: str = "",
     side_filters: list[str] | None = None,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
@@ -158,19 +159,40 @@ async def pick_accent_side_from_allrecipes(
 ) -> dict[str, Any] | None:
     """Try to pull a real accent side recipe from AllRecipes."""
     from app.services.allrecipes_scraper import fetch_recipe_page, search_allrecipes
+    from app.services.dish_families import detect_dish_anchor
 
     plan = plan or {}
     side_filters = side_filters or []
+    user_anchor, _ = detect_dish_anchor(what_sounds_good or main_title)
+    use_family = bool(dish_anchor and user_anchor == dish_anchor)
+
     search_terms: list[str] = []
     if side_filters:
         search_terms.extend(side_filters[:2])
-    pool = list(PAIRING_ACCENTS.get(dish_anchor or "", [])) + list(GENERIC_PAIRING_SIDES)
-    for term, _ in pool[:3]:
-        search_terms.append(term)
-    if dish_anchor == "taco":
-        search_terms.extend(["pico de gallo", "mexican street corn"])
+    if main_title:
+        short = main_title[:55]
+        search_terms.append(f"side dish for {short}")
+        for protein in ("chicken", "beef", "pork", "fish", "salmon", "shrimp", "turkey"):
+            if protein in main_title.lower():
+                search_terms.append(f"{protein} side dish")
+                break
+    search_terms.append("easy side dish")
+    if use_family:
+        for term, _ in PAIRING_ACCENTS.get(dish_anchor or "", [])[:3]:
+            search_terms.append(term)
+    else:
+        for term, _ in GENERIC_PAIRING_SIDES[:4]:
+            search_terms.append(term)
 
-    for query in search_terms[:4]:
+    seen: set[str] = set()
+    unique_queries: list[str] = []
+    for q in search_terms:
+        ql = q.lower()
+        if ql not in seen:
+            seen.add(ql)
+            unique_queries.append(q)
+
+    for query in unique_queries[:5]:
         hits = await search_allrecipes(query, limit=5)
         for hit in hits:
             title = (hit.get("title") or "").lower()
@@ -226,18 +248,24 @@ def pick_accent_side(
     side_filters = side_filters or []
     plan = plan or {}
 
+    from app.services.dish_families import detect_dish_anchor
+
+    user_anchor, _ = detect_dish_anchor(plan.get("what_sounds_good") or "")
+    use_family = bool(dish_anchor and user_anchor == dish_anchor)
+
     candidate_keys: list[str] = []
     for sf in side_filters:
         k = _term_to_key(sf)
         if k:
             candidate_keys.append(k)
-    for key in SIDE_TEMPLATE_KEYS.get(dish_anchor or "", []):
-        if key not in candidate_keys:
-            candidate_keys.append(key)
-    for term, _ in PAIRING_ACCENTS.get(dish_anchor or "", [])[:4]:
-        k = _term_to_key(term)
-        if k and k not in candidate_keys:
-            candidate_keys.append(k)
+    if use_family:
+        for key in SIDE_TEMPLATE_KEYS.get(dish_anchor or "", []):
+            if key not in candidate_keys:
+                candidate_keys.append(key)
+        for term, _ in PAIRING_ACCENTS.get(dish_anchor or "", [])[:4]:
+            k = _term_to_key(term)
+            if k and k not in candidate_keys:
+                candidate_keys.append(k)
     for term, _ in GENERIC_PAIRING_SIDES:
         k = _term_to_key(term)
         if k and k not in candidate_keys:
