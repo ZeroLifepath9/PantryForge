@@ -1042,10 +1042,10 @@ async function bootstrap() {
     updateAllFilterCounts();
     const badge = $("mock-badge");
     if (badge) {
-      if (meta.mock_mode || !meta.spoonacular_configured) {
-        badge.textContent = meta.spoonacular_configured
-          ? "Demo mode"
-          : "API keys not detected on server";
+      if (meta.mock_mode || !meta.xai_configured) {
+        badge.textContent = meta.xai_configured
+          ? "AllRecipes mode"
+          : "Set XAI_API_KEY on server for chef judge";
         badge.classList.remove("hidden");
       } else {
         badge.classList.add("hidden");

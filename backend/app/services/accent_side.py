@@ -146,6 +146,71 @@ def _term_to_key(term: str) -> str | None:
     return None
 
 
+async def pick_accent_side_from_allrecipes(
+    *,
+    dish_anchor: str | None,
+    main_title: str = "",
+    side_filters: list[str] | None = None,
+    diets: list[str] | None = None,
+    intolerances: list[str] | None = None,
+    health_conditions: list[str] | None = None,
+    plan: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Try to pull a real accent side recipe from AllRecipes."""
+    from app.services.allrecipes_scraper import fetch_recipe_page, search_allrecipes
+
+    plan = plan or {}
+    side_filters = side_filters or []
+    search_terms: list[str] = []
+    if side_filters:
+        search_terms.extend(side_filters[:2])
+    pool = list(PAIRING_ACCENTS.get(dish_anchor or "", [])) + list(GENERIC_PAIRING_SIDES)
+    for term, _ in pool[:3]:
+        search_terms.append(term)
+    if dish_anchor == "taco":
+        search_terms.extend(["pico de gallo", "mexican street corn"])
+
+    for query in search_terms[:4]:
+        hits = await search_allrecipes(query, limit=5)
+        for hit in hits:
+            title = (hit.get("title") or "").lower()
+            if any(skip in title for skip in ("sauce only", "taco bell", "copycat")):
+                continue
+            if "salad" in title or "pico" in title or "slaw" in title or "rice" in title or "corn" in title or "beans" in title:
+                card = await fetch_recipe_page(hit["url"])
+                if not card:
+                    continue
+                key = _term_to_key(query) or "accent"
+                if not _side_passes_diets(key, diets or []):
+                    continue
+                if not _side_passes_intolerances(key, intolerances or [], card):
+                    continue
+                cite = pairing_cite_for_term(plan, card.get("title", ""))
+                return {
+                    "key": key,
+                    "title": card.get("title"),
+                    "why": cite,
+                    "pairs_because": cite,
+                    "diet_note": _diet_note(diets, health_conditions),
+                    "ingredients": [i["name"] if isinstance(i, dict) else i for i in (card.get("ingredients") or [])],
+                    "steps": [
+                        {"step": i + 1, "text": t, "tip": None}
+                        for i, t in enumerate(card.get("instructions") or [])
+                    ],
+                    "source_url": card.get("source_url"),
+                }
+    return None
+
+
+def _diet_note(diets: list[str] | None, health: list[str] | None) -> str | None:
+    bits = []
+    if diets:
+        bits.append(f"fits {', '.join(diets)}")
+    if health:
+        bits.append(f"works for {', '.join(health)}")
+    return "; ".join(bits) if bits else None
+
+
 def pick_accent_side(
     *,
     dish_anchor: str | None,

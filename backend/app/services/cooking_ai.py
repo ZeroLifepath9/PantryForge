@@ -8,6 +8,7 @@ from typing import Any
 
 from app.config import settings
 from app.services import mock_data
+from app.services.grok_recipe_store import get as get_stored_recipe
 from app.services.recipe_search import get_recipe_detail
 from app.services.xai_client import chat_completion
 
@@ -49,12 +50,23 @@ async def simplify_recipe(
     intolerances: list[str] | None = None,
     health_conditions: list[str] | None = None,
 ) -> tuple[dict | None, bool]:
+    stored = get_stored_recipe(recipe_id)
     detail, is_mock_detail = await get_recipe_detail(recipe_id)
+    if stored:
+        detail = {
+            "id": stored["id"],
+            "title": stored.get("title"),
+            "ingredients": stored.get("ingredients") or [
+                {"name": n, "amount": None} for n in (stored.get("ingredient_names") or [])
+            ],
+            "instructions": stored.get("instructions") or [],
+        }
+        is_mock_detail = False
     if not detail:
         return None, True
 
     direct = skill_level == "direct" or not explain_techniques
-    if not settings.xai_key or is_mock_detail:
+    if not settings.xai_key:
         result = mock_data.mock_simplify_steps(
             recipe_id,
             explain_techniques=explain_techniques,

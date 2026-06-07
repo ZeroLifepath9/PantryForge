@@ -35,7 +35,7 @@ async def search_meta():
     return MetaResponse(
         mock_mode=settings.mock_mode,
         xai_configured=bool(settings.xai_key),
-        spoonacular_configured=bool(settings.spoonacular_key),
+        spoonacular_configured=False,
         diets=[DietOption(**d) for d in mock_data.DIET_OPTIONS],
         intolerances=[DietOption(**d) for d in mock_data.INTOLERANCE_OPTIONS],
         health_conditions=[DietOption(**d) for d in mock_data.HEALTH_CONDITION_OPTIONS],

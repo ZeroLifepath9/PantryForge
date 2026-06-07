@@ -125,15 +125,13 @@ class Settings(BaseSettings):
 
     @property
     def mock_mode(self) -> bool:
-        # Any Spoonacular key → live recipe search
-        if self.spoonacular_key:
+        """Live chef mode when XAI_API_KEY is set (AllRecipes + Grok)."""
+        if self.xai_key:
             return False
         explicit = _env_value("USE_MOCK_DATA").lower()
-        if explicit in ("0", "false", "no"):
-            return False
         if explicit in ("1", "true", "yes"):
             return True
-        return self.use_mock_data
+        return True
 
     def cors_origin_list(self) -> list[str]:
         raw = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
@@ -207,10 +205,10 @@ def validate_production_settings() -> None:
         f"{f' ({xai_var})' if xai_var else ''}",
         flush=True,
     )
-    if settings.is_production and not settings.spoonacular_key:
+    if settings.is_production and not settings.xai_key:
         print(
-            "[pantry-forge] ERROR: SPOONACULAR_API_KEY not found in environment. "
-            "Set it in Render → Environment. Demo data only until fixed.",
+            "[pantry-forge] WARNING: XAI_API_KEY not found. "
+            "AllRecipes scrape works; set XAI_API_KEY for chef-judge curation and instructor steps.",
             file=sys.stderr,
             flush=True,
         )

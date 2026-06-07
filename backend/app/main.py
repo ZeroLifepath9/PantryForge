@@ -33,7 +33,7 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 # Bump when shipping UI changes — breaks browser cache for static assets.
-APP_VERSION = os.environ.get("APP_VERSION", "20250607-relevant")
+APP_VERSION = os.environ.get("APP_VERSION", "20250608-grok-ar")
 
 
 @asynccontextmanager
@@ -77,10 +77,10 @@ def _health_payload() -> dict:
         "status": "ok",
         "app": "alchemy-pantry",
         "version": APP_VERSION,
+        "recipe_source": "allrecipes+grok",
         "mock_mode": settings.mock_mode,
         "xai_configured": bool(settings.xai_key),
-        "spoonacular_configured": bool(settings.spoonacular_key),
-        "spoonacular_env": _spoonacular_env_name(),
+        "spoonacular_configured": False,
         "xai_env": _xai_env_name(),
         "env": settings.env,
     }

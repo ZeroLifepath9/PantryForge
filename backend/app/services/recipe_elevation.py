@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from app.config import settings
-from app.services.accent_side import pick_accent_side
+from app.services.accent_side import pick_accent_side, pick_accent_side_from_allrecipes
 from app.services.cooking_ai import simplify_recipe
 from app.services.dish_families import detect_dish_anchor
 from app.services.xai_client import chat_completion
@@ -327,14 +327,24 @@ async def build_cook_kit(
     title = steps_result["title"]
     anchor = dish_anchor or _detect_anchor(title, what_sounds_good)
     plan_stub = {"dish_anchor": anchor, "pairing_cites": {}}
-    accent = pick_accent_side(
+    accent = await pick_accent_side_from_allrecipes(
         dish_anchor=anchor,
+        main_title=title,
         side_filters=side_filters,
         diets=diets,
         intolerances=intolerances,
         health_conditions=health_conditions,
         plan=plan_stub,
     )
+    if not accent:
+        accent = pick_accent_side(
+            dish_anchor=anchor,
+            side_filters=side_filters,
+            diets=diets,
+            intolerances=intolerances,
+            health_conditions=health_conditions,
+            plan=plan_stub,
+        )
 
     if not settings.xai_key or steps_mock:
         return {

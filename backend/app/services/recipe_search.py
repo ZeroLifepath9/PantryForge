@@ -1,9 +1,11 @@
-"""Recipe search facade — Spoonacular when API key is set, mock otherwise."""
+"""Recipe detail facade — Grok recipe store + AllRecipes (no Spoonacular)."""
 
 from __future__ import annotations
 
 from app.config import settings
 from app.services import mock_data
+from app.services.allrecipes_scraper import fetch_recipe_page
+from app.services.grok_recipe_store import get_detail, put
 
 
 async def search_recipes(
@@ -15,20 +17,7 @@ async def search_recipes(
     include_pantry_staples: bool = True,
     pantry_staples: list[str] | None = None,
 ) -> tuple[dict, bool]:
-    if settings.mock_mode or not settings.spoonacular_key:
-        payload = mock_data.mock_search_recipes(
-            ingredients,
-            diets=diets,
-            intolerances=intolerances,
-            health_conditions=health_conditions,
-            include_pantry_staples=include_pantry_staples,
-            pantry_staples=pantry_staples or settings.pantry_staple_list(),
-        )
-        return payload, True
-
-    from app.services import spoonacular
-
-    payload = await spoonacular.search_recipes(
+    payload = mock_data.mock_search_recipes(
         ingredients,
         diets=diets,
         intolerances=intolerances,
@@ -36,18 +25,17 @@ async def search_recipes(
         include_pantry_staples=include_pantry_staples,
         pantry_staples=pantry_staples or settings.pantry_staple_list(),
     )
-    return payload, False
+    return payload, True
 
 
 async def get_recipe_detail(recipe_id: int) -> tuple[dict | None, bool]:
-    if settings.mock_mode or not settings.spoonacular_key:
-        return mock_data.mock_recipe_detail(recipe_id), True
+    cached = get_detail(recipe_id)
+    if cached:
+        return cached, False
 
-    from app.services import spoonacular
-
-    detail = await spoonacular.get_recipe_detail(recipe_id)
-    if detail:
-        return detail, False
-    # Spoonacular miss — fall back to mock ids for dev continuity
+    # Legacy mock ids
     mock = mock_data.mock_recipe_detail(recipe_id)
-    return mock, mock is not None
+    if mock:
+        return mock, True
+
+    return None, True
