@@ -11,6 +11,8 @@ async def search_by_craving(
     what_sounds_good: str,
     *,
     protein_filter: str | None = None,
+    protein_filters: list[str] | None = None,
+    side_filters: list[str] | None = None,
     selected_recipe_ids: list[int] | None = None,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
@@ -19,6 +21,8 @@ async def search_by_craving(
     return await run_chef_search(
         what_sounds_good,
         protein_filter=protein_filter,
+        protein_filters=protein_filters,
+        side_filters=side_filters,
         selected_recipe_ids=selected_recipe_ids,
         diets=diets,
         intolerances=intolerances,

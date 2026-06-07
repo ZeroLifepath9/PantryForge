@@ -61,6 +61,12 @@ async def simplify_recipe_endpoint(
         recipe_id,
         explain_techniques=explain,
         skill_level=skill,
+        what_sounds_good=body.what_sounds_good,
+        protein_filters=body.protein_filters,
+        side_filters=body.side_filters,
+        diets=body.diets,
+        intolerances=body.intolerances,
+        health_conditions=body.health_conditions,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Recipe not found")

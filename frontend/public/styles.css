@@ -112,6 +112,251 @@ textarea { resize: vertical; min-height: 5rem; }
 
 .field-grow { flex: 1; }
 
+.search-bar-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: stretch;
+  margin-bottom: 1rem;
+}
+
+.search-bar-row textarea {
+  flex: 1;
+  min-height: 3.25rem;
+  margin: 0;
+  resize: none;
+}
+
+.search-bar-btn {
+  align-self: stretch;
+  min-width: 8.5rem;
+  padding: 0.75rem 1.1rem;
+  white-space: nowrap;
+}
+
+.filter-dropdown-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter-dropdown {
+  position: relative;
+}
+
+.filter-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.filter-dropdown-trigger:hover,
+.filter-dropdown:focus-within .filter-dropdown-trigger,
+.filter-dropdown.open .filter-dropdown-trigger {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.filter-dropdown-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--green);
+  color: #fff;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.35rem;
+}
+
+.filter-dropdown-count.visible {
+  display: inline-flex;
+}
+
+.filter-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 40;
+  min-width: 220px;
+  max-width: 280px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.filter-dropdown:hover .filter-dropdown-menu,
+.filter-dropdown:focus-within .filter-dropdown-menu,
+.filter-dropdown.open .filter-dropdown-menu {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.filter-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.filter-menu-item:hover {
+  background: var(--green-soft);
+}
+
+.filter-menu-item input {
+  accent-color: var(--green);
+  margin: 0;
+}
+
+.results-tab,
+.recipe-tab {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 1rem 1.25rem 2rem;
+}
+
+.results-tab.hidden,
+.recipe-tab.hidden {
+  display: none;
+}
+
+.tab-header {
+  max-width: 960px;
+  margin: 0 auto 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.tab-header h2 {
+  margin: 0;
+}
+
+.tab-subline {
+  margin: 0.25rem 0 0;
+}
+
+.tab-close {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.tab-close:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.results-tab .meal-card-grid,
+.results-tab .selection-bar,
+.results-tab .chef-results-insight,
+.results-tab .parsed-chips {
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.meal-card-hover-ingredients {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 0.75rem;
+  background: rgba(27, 67, 50, 0.94);
+  color: #fff;
+  border-radius: 12px;
+  overflow-y: auto;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.meal-card-hover-ingredients strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.9;
+}
+
+.meal-card-hover-ingredients ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.meal-card {
+  position: relative;
+}
+
+.meal-card:hover .meal-card-hover-ingredients {
+  display: block;
+}
+
+.meal-card-open-btn {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.meal-card-select-label {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 6px;
+  padding: 0.2rem 0.35rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .search-bar-row {
+    flex-direction: column;
+  }
+  .search-bar-btn {
+    width: 100%;
+  }
+}
+
 .auth-tabs {
   display: flex;
   gap: 0.5rem;
@@ -771,14 +1016,12 @@ textarea { resize: vertical; min-height: 5rem; }
 }
 
 .meal-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
+  display: block;
   padding: 0.85rem;
   border: 2px solid var(--border);
   border-radius: 12px;
   background: #fff;
-  cursor: pointer;
+  cursor: default;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 

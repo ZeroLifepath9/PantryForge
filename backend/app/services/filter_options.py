@@ -1,0 +1,53 @@
+"""Static filter menus for protein and side/salad search."""
+
+PROTEIN_OPTIONS = [
+    {"value": "chicken", "label": "Chicken"},
+    {"value": "beef", "label": "Beef"},
+    {"value": "pork", "label": "Pork"},
+    {"value": "turkey", "label": "Turkey"},
+    {"value": "lamb", "label": "Lamb"},
+    {"value": "shrimp", "label": "Shrimp"},
+    {"value": "fish", "label": "Fish"},
+    {"value": "salmon", "label": "Salmon"},
+    {"value": "tofu", "label": "Tofu"},
+    {"value": "vegetarian", "label": "Vegetarian"},
+]
+
+SIDE_OPTIONS = [
+    {"value": "green salad", "label": "Green / lettuce salad"},
+    {"value": "kale salad", "label": "Kale salad"},
+    {"value": "spinach salad", "label": "Spinach salad"},
+    {"value": "arugula salad", "label": "Arugula salad"},
+    {"value": "caesar salad", "label": "Caesar salad"},
+    {"value": "greek salad", "label": "Greek salad"},
+    {"value": "wedge salad", "label": "Wedge salad"},
+    {"value": "pasta salad", "label": "Pasta salad"},
+    {"value": "orzo salad", "label": "Orzo salad"},
+    {"value": "macaroni salad", "label": "Macaroni salad"},
+    {"value": "potato salad", "label": "Potato salad"},
+    {"value": "warm potato side", "label": "Warm potato side"},
+    {"value": "cucumber salad", "label": "Cucumber salad"},
+    {"value": "egg salad", "label": "Egg salad"},
+    {"value": "deviled egg salad", "label": "Deviled egg salad"},
+    {"value": "coleslaw", "label": "Coleslaw"},
+    {"value": "caprese salad", "label": "Caprese"},
+    {"value": "quinoa salad", "label": "Quinoa salad"},
+    {"value": "farro salad", "label": "Farro / grain salad"},
+    {"value": "rice salad", "label": "Rice salad"},
+    {"value": "bean salad", "label": "Bean salad"},
+    {"value": "corn salad", "label": "Corn salad"},
+    {"value": "broccoli salad", "label": "Broccoli salad"},
+    {"value": "beet salad", "label": "Beet salad"},
+    {"value": "fruit salad", "label": "Fruit salad"},
+    {"value": "tabbouleh", "label": "Tabbouleh"},
+    {"value": "couscous salad", "label": "Couscous salad"},
+    {"value": "taco salad", "label": "Taco salad"},
+    {"value": "roasted vegetables", "label": "Roasted vegetables"},
+    {"value": "rice pilaf", "label": "Rice pilaf"},
+    {"value": "mashed potatoes", "label": "Mashed potatoes"},
+    {"value": "garlic bread", "label": "Garlic bread"},
+    {"value": "soup side", "label": "Soup / stew side"},
+]
+
+PROTEIN_VALUES = [p["value"] for p in PROTEIN_OPTIONS]
+SIDE_VALUES = [s["value"] for s in SIDE_OPTIONS]

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-judge-save" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-search-ui" />
 </head>
 <body>
   <header class="site-header">
@@ -48,52 +48,73 @@
 
     <section id="search-panel" class="panel panel-main hidden">
       <h2>What sounds good?</h2>
-      <p class="hint">Tell me what sounds good — one craving or several. I'll find recipes to inspire you, then help you cook something original at home with what's on hand.</p>
-      <label class="field-grow">
-        What sounds good?
-        <textarea id="sounds-good-input" rows="3" maxlength="500" placeholder="e.g. I want tacos · chicken pasta · salmon with something light"></textarea>
-      </label>
+      <p class="hint">Describe your craving. Pick protein, sides, and diets — then find up to 25 recipes shaped by your choices.</p>
 
-      <fieldset class="filter-fieldset filter-diets">
-        <legend>Lifestyle diets</legend>
-        <div id="diet-options" class="chip-grid"></div>
-      </fieldset>
-      <fieldset class="filter-fieldset filter-health">
-        <legend>Allergies &amp; intolerances</legend>
-        <div id="intolerance-options" class="chip-grid"></div>
-      </fieldset>
-      <fieldset class="filter-fieldset filter-medical">
-        <legend>Medical dietary needs</legend>
-        <div id="health-condition-options" class="chip-grid chip-grid-medical"></div>
-      </fieldset>
+      <div class="search-bar-row">
+        <textarea id="sounds-good-input" rows="2" maxlength="500" placeholder="e.g. tacos and a crisp salad · spicy chicken pasta" aria-label="What sounds good?"></textarea>
+        <button type="button" id="search-btn" class="btn-primary search-bar-btn">Find recipes</button>
+      </div>
+
+      <div class="filter-dropdown-row">
+        <div class="filter-dropdown" id="diet-dropdown">
+          <button type="button" class="filter-dropdown-trigger" aria-haspopup="true">
+            <span class="filter-dropdown-label">Lifestyle diets</span>
+            <span class="filter-dropdown-count" id="diet-count"></span>
+          </button>
+          <div class="filter-dropdown-menu" id="diet-options"></div>
+        </div>
+        <div class="filter-dropdown" id="allergy-dropdown">
+          <button type="button" class="filter-dropdown-trigger" aria-haspopup="true">
+            <span class="filter-dropdown-label">Allergies</span>
+            <span class="filter-dropdown-count" id="allergy-count"></span>
+          </button>
+          <div class="filter-dropdown-menu" id="intolerance-options"></div>
+        </div>
+        <div class="filter-dropdown" id="medical-dropdown">
+          <button type="button" class="filter-dropdown-trigger" aria-haspopup="true">
+            <span class="filter-dropdown-label">Medical needs</span>
+            <span class="filter-dropdown-count" id="medical-count"></span>
+          </button>
+          <div class="filter-dropdown-menu" id="health-condition-options"></div>
+        </div>
+        <div class="filter-dropdown" id="protein-dropdown">
+          <button type="button" class="filter-dropdown-trigger" aria-haspopup="true">
+            <span class="filter-dropdown-label">Protein</span>
+            <span class="filter-dropdown-count" id="protein-count"></span>
+          </button>
+          <div class="filter-dropdown-menu" id="protein-options"></div>
+        </div>
+        <div class="filter-dropdown" id="side-dropdown">
+          <button type="button" class="filter-dropdown-trigger" aria-haspopup="true">
+            <span class="filter-dropdown-label">Sides &amp; salads</span>
+            <span class="filter-dropdown-count" id="side-count"></span>
+          </button>
+          <div class="filter-dropdown-menu" id="side-options"></div>
+        </div>
+      </div>
 
       <div class="toggle-row">
         <label class="toggle">
           <input type="checkbox" id="explain-techniques" checked />
-          <span>Full steps with cooking tips (uncheck for direct instructions)</span>
+          <span>Instructor steps with cooking tips</span>
         </label>
       </div>
-
-      <button type="button" id="search-btn" class="btn-primary btn-wide">Find recipes</button>
       <p id="search-status" class="status" role="status"></p>
     </section>
 
-    <section id="results-panel" class="panel hidden">
-      <div class="results-header">
-        <h2 id="results-heading">Recipes for you</h2>
-        <div id="chef-insight" class="chef-results-insight hidden"></div>
-        <p id="results-message" class="hint"></p>
+    <section id="results-tab" class="results-tab hidden" aria-label="Recipe results">
+      <div class="tab-header">
+        <div>
+          <h2 id="results-heading">Recipes</h2>
+          <p id="results-message" class="hint tab-subline"></p>
+        </div>
+        <button type="button" id="close-results-tab" class="tab-close" aria-label="Close results">×</button>
       </div>
+      <div id="chef-insight" class="chef-results-insight hidden"></div>
       <div id="parsed-craving" class="parsed-chips hidden"></div>
-      <div id="protein-prompt" class="protein-prompt hidden">
-        <p class="protein-prompt-label">Filter by protein to refresh results <span class="hint-inline">(optional)</span></p>
-        <div id="protein-options" class="protein-options"></div>
-      </div>
-
       <div id="recipes-list" class="meal-card-grid results-scroll"></div>
-
       <div class="selection-bar">
-        <p id="selection-count" class="hint">Select up to 5 meals that inspire what you want to cook.</p>
+        <p id="selection-count" class="hint">Check up to 5 to build your inspire dash. Click a card for AI cooking steps.</p>
         <button type="button" id="inspired-btn" class="btn-primary" disabled>Build my inspire dash</button>
       </div>
     </section>
@@ -145,13 +166,17 @@
       </div>
     </section>
 
-    <section id="recipe-panel" class="panel hidden">
-      <button type="button" id="back-from-recipe" class="btn-ghost">← Back</button>
-      <h2 id="recipe-title"></h2>
-      <p id="recipe-meta" class="hint"></p>
+    <section id="recipe-tab" class="recipe-tab hidden" aria-label="Recipe instructions">
+      <div class="tab-header">
+        <div>
+          <h2 id="recipe-title">Recipe</h2>
+          <p id="recipe-meta" class="hint tab-subline"></p>
+        </div>
+        <button type="button" id="close-recipe-tab" class="tab-close" aria-label="Close recipe">×</button>
+      </div>
       <div id="recipe-links" class="link-row"></div>
       <div class="step-mode-row">
-        <button type="button" id="recipe-mode-beginner" class="btn-chip active">Full steps + tips</button>
+        <button type="button" id="recipe-mode-beginner" class="btn-chip active">Instructor steps + tips</button>
         <button type="button" id="recipe-mode-direct" class="btn-chip">Keep it direct</button>
       </div>
       <ol id="recipe-steps" class="recipe-steps"></ol>
@@ -181,6 +206,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20250606-judge-save"></script>
+  <script src="/static/app.js?v=20250606-search-ui"></script>
 </body>
 </html>

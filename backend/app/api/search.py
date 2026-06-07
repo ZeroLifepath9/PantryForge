@@ -30,6 +30,8 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.get("/meta", response_model=MetaResponse)
 async def search_meta():
+    from app.services.filter_options import PROTEIN_OPTIONS, SIDE_OPTIONS
+
     return MetaResponse(
         mock_mode=settings.mock_mode,
         xai_configured=bool(settings.xai_key),
@@ -37,6 +39,8 @@ async def search_meta():
         diets=[DietOption(**d) for d in mock_data.DIET_OPTIONS],
         intolerances=[DietOption(**d) for d in mock_data.INTOLERANCE_OPTIONS],
         health_conditions=[DietOption(**d) for d in mock_data.HEALTH_CONDITION_OPTIONS],
+        protein_options=[DietOption(**d) for d in PROTEIN_OPTIONS],
+        side_options=[DietOption(**d) for d in SIDE_OPTIONS],
     )
 
 
@@ -48,9 +52,18 @@ async def parse_ingredients_endpoint(body: ParseIngredientsRequest):
 
 @router.post("/craving", response_model=CravingSearchResponse)
 async def search_craving_endpoint(body: CravingSearchRequest):
+    protein_filter = body.protein_filter
+    protein_filters = body.protein_filters or []
+    if protein_filter and protein_filter not in protein_filters:
+        protein_filters = [protein_filter, *protein_filters]
+    elif not protein_filter and protein_filters:
+        protein_filter = protein_filters[0]
+
     payload, is_mock = await search_by_craving(
         body.what_sounds_good,
-        protein_filter=body.protein_filter,
+        protein_filter=protein_filter,
+        protein_filters=protein_filters,
+        side_filters=body.side_filters,
         selected_recipe_ids=body.selected_recipe_ids,
         diets=body.diets,
         intolerances=body.intolerances,

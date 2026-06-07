@@ -116,6 +116,12 @@ class RecipeDetailResponse(BaseModel):
 class SimplifyRecipeRequest(BaseModel):
     explain_techniques: bool | None = None
     skill_level: str | None = None
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+    protein_filters: list[str] = Field(default_factory=list, max_length=5)
+    side_filters: list[str] = Field(default_factory=list, max_length=8)
+    diets: list[str] = []
+    intolerances: list[str] = []
+    health_conditions: list[str] = []
 
 
 class SimplifiedStep(BaseModel):
@@ -144,6 +150,8 @@ class MetaResponse(BaseModel):
     diets: list[DietOption]
     intolerances: list[DietOption]
     health_conditions: list[DietOption]
+    protein_options: list[DietOption] = []
+    side_options: list[DietOption] = []
 
 
 class AdvisorRecipeInput(BaseModel):
@@ -234,11 +242,14 @@ class MealRecipeCard(BaseModel):
     servings: int | None = None
     source_url: str | None = None
     diets: list[str] = []
+    ingredient_names: list[str] = []
 
 
 class CravingSearchRequest(BaseModel):
     what_sounds_good: str = Field(min_length=1, max_length=500)
     protein_filter: str | None = Field(default=None, max_length=80)
+    protein_filters: list[str] = Field(default_factory=list, max_length=5)
+    side_filters: list[str] = Field(default_factory=list, max_length=8)
     selected_recipe_ids: list[int] = Field(default_factory=list, max_length=5)
     diets: list[str] = []
     intolerances: list[str] = []

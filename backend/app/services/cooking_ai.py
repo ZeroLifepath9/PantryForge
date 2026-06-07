@@ -11,15 +11,18 @@ from app.services import mock_data
 from app.services.recipe_search import get_recipe_detail
 from app.services.xai_client import chat_completion
 
-SIMPLIFY_SYSTEM = """You simplify recipe instructions for home cooks.
+SIMPLIFY_SYSTEM = """You are an executive chef teaching a home cook through a recipe.
+Honor their diets, allergies, medical needs, protein preference, and side/salad choices.
+Suggest ingredient substitutions inline when an ingredient conflicts with their filters.
+
 Output ONLY valid JSON:
 {
   "steps": [
-    {"step": 1, "text": "clear instruction", "tip": "beginner tip or null"}
+    {"step": 1, "text": "clear instructor-level instruction", "tip": "technique tip or null"}
   ]
 }
-Keep every original step — do not skip steps. If explain_techniques is false, set all tips to null.
-Use plain language. One action per step when possible."""
+Keep every cooking step — do not skip. If explain_techniques is false, set all tips to null.
+One action per step. Precise heat, timing, and sensory cues."""
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -39,6 +42,12 @@ async def simplify_recipe(
     *,
     explain_techniques: bool = True,
     skill_level: str = "beginner",
+    what_sounds_good: str | None = None,
+    protein_filters: list[str] | None = None,
+    side_filters: list[str] | None = None,
+    diets: list[str] | None = None,
+    intolerances: list[str] | None = None,
+    health_conditions: list[str] | None = None,
 ) -> tuple[dict | None, bool]:
     detail, is_mock_detail = await get_recipe_detail(recipe_id)
     if not detail:
@@ -58,6 +67,12 @@ async def simplify_recipe(
         "ingredients": detail.get("ingredients") or [],
         "instructions": detail.get("instructions") or [],
         "explain_techniques": not direct,
+        "what_sounds_good": what_sounds_good,
+        "protein_filters": protein_filters or [],
+        "side_filters": side_filters or [],
+        "diets": diets or [],
+        "intolerances": intolerances or [],
+        "health_conditions": health_conditions or [],
     }
     try:
         text = await chat_completion(

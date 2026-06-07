@@ -56,13 +56,52 @@ async def _search_term(
         return []
 
 
+def _apply_user_filters(
+    plan: dict[str, Any],
+    *,
+    protein_filter: str | None,
+    protein_filters: list[str],
+    side_filters: list[str],
+) -> dict[str, Any]:
+    plan = dict(plan)
+    proteins = [p for p in (protein_filters or []) if p]
+    if protein_filter and protein_filter not in proteins:
+        proteins.insert(0, protein_filter)
+    if proteins:
+        plan["protein"] = proteins[0]
+        plan["protein_filter"] = proteins[0]
+    side_terms = list(plan.get("pairing_side_terms") or [])
+    for term in side_filters or []:
+        if term and term not in side_terms:
+            side_terms.insert(0, term)
+    if side_terms:
+        plan["pairing_side_terms"] = side_terms[:12]
+    return plan
+
+
+def _side_filter_match(card: dict[str, Any], side_filters: list[str]) -> bool:
+    if not side_filters:
+        return True
+    title = (card.get("title") or "").lower()
+    blob = title + " " + " ".join(card.get("ingredient_names") or [])
+    for sf in side_filters:
+        tokens = sf.lower().split()
+        if all(t in blob for t in tokens):
+            return True
+        if sf.lower() in title:
+            return True
+    return False
+
+
 async def fetch_candidates(
     plan: dict[str, Any],
     *,
     diets: list[str],
     intolerances: list[str],
+    side_filters: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     protein = plan.get("protein")
+    side_filters = side_filters or []
     tasks: list[tuple[str, Any]] = []
 
     for thread in plan.get("craving_threads") or []:
@@ -82,11 +121,16 @@ async def fetch_candidates(
             number=6, dish_type=None, tag=bridge.get("label", "bridge"),
         )))
 
-    for term in (plan.get("pairing_side_terms") or [])[:8]:
+    side_queries = list(plan.get("pairing_side_terms") or [])[:10]
+    if side_filters:
+        side_queries = list(side_filters) + [q for q in side_queries if q not in side_filters]
+    for term in side_queries[:10]:
         tasks.append(("side", _search_term(
             str(term),
             diets=diets, intolerances=intolerances,
-            number=5, dish_type=None, tag="pairing",
+            number=6 if side_filters else 5,
+            dish_type=None,
+            tag="pairing",
         )))
 
     if not tasks:
@@ -190,6 +234,8 @@ async def chef_search(
     what_sounds_good: str,
     *,
     protein_filter: str | None = None,
+    protein_filters: list[str] | None = None,
+    side_filters: list[str] | None = None,
     selected_recipe_ids: list[int] | None = None,
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
@@ -198,9 +244,17 @@ async def chef_search(
     diets = diets or []
     intolerances = intolerances or []
     health_conditions = health_conditions or []
+    protein_filters = protein_filters or []
+    side_filters = side_filters or []
     selected_recipe_ids = (selected_recipe_ids or [])[:5]
 
     plan, analyze_mock = await analyze_craving(what_sounds_good, protein_filter=protein_filter)
+    plan = _apply_user_filters(
+        plan,
+        protein_filter=protein_filter,
+        protein_filters=protein_filters,
+        side_filters=side_filters,
+    )
 
     use_live = bool(settings.spoonacular_key) and not settings.mock_mode
     candidates: list[dict[str, Any]] = []
@@ -208,7 +262,12 @@ async def chef_search(
 
     if use_live:
         try:
-            candidates = await fetch_candidates(plan, diets=diets, intolerances=intolerances)
+            candidates = await fetch_candidates(
+                plan,
+                diets=diets,
+                intolerances=intolerances,
+                side_filters=side_filters,
+            )
             if candidates:
                 fetch_mock = False
                 logger.info("chef fetch: %d candidates", len(candidates))
@@ -223,6 +282,11 @@ async def chef_search(
             intolerances=intolerances,
             health_conditions=health_conditions,
         )
+
+    if side_filters:
+        preferred = [c for c in candidates if c.get("category") in ("side", "salad", "dip") and _side_filter_match(c, side_filters)]
+        other = [c for c in candidates if c not in preferred]
+        candidates = preferred + other
 
     recipes, curate_mock = await curate_lineup(
         plan,

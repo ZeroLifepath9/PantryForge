@@ -5,13 +5,13 @@ let meta = {
   diets: [],
   intolerances: [],
   health_conditions: [],
+  protein_options: [],
+  side_options: [],
   mock_mode: true,
   xai_configured: false,
   spoonacular_configured: false,
 };
 let lastCraving = null;
-let selectedProteinFilter = null;
-let proteinFilterExplicit = false;
 let selectedIds = new Set();
 let inspiredSetup = null;
 let pendingSubstitutions = [];
@@ -59,33 +59,61 @@ function setStatus(el, msg, isError = false) {
   el.classList.toggle("error", !!isError);
 }
 
+function selectedFromMenu(menuId) {
+  return [...document.querySelectorAll(`#${menuId} input:checked`)].map((el) => el.value);
+}
+
 function selectedDiets() {
-  return [...document.querySelectorAll("#diet-options input:checked")].map((el) => el.value);
+  return selectedFromMenu("diet-options");
 }
 
 function selectedIntolerances() {
-  return [...document.querySelectorAll("#intolerance-options input:checked")].map((el) => el.value);
+  return selectedFromMenu("intolerance-options");
 }
 
 function selectedHealthConditions() {
-  return [...document.querySelectorAll("#health-condition-options input:checked")].map((el) => el.value);
+  return selectedFromMenu("health-condition-options");
+}
+
+function selectedProteins() {
+  return selectedFromMenu("protein-options");
+}
+
+function selectedSides() {
+  return selectedFromMenu("side-options");
+}
+
+function updateFilterCount(menuId, countId) {
+  const n = document.querySelectorAll(`#${menuId} input:checked`).length;
+  const el = $(countId);
+  if (!el) return;
+  el.textContent = n ? String(n) : "";
+  el.classList.toggle("visible", n > 0);
+}
+
+function updateAllFilterCounts() {
+  updateFilterCount("diet-options", "diet-count");
+  updateFilterCount("intolerance-options", "allergy-count");
+  updateFilterCount("health-condition-options", "medical-count");
+  updateFilterCount("protein-options", "protein-count");
+  updateFilterCount("side-options", "side-count");
 }
 
 function soundsGoodText() {
   return $("sounds-good-input")?.value?.trim() || "";
 }
 
-function renderChipOptions(containerId, options, name, extraClass = "") {
+function renderFilterMenu(containerId, options, name) {
   const wrap = $(containerId);
   if (!wrap) return;
   if (!options?.length) {
-    wrap.innerHTML = `<p class="fieldset-hint">No options available.</p>`;
+    wrap.innerHTML = `<p class="fieldset-hint">No options.</p>`;
     return;
   }
   wrap.innerHTML = options
     .map(
       (d) =>
-        `<label class="chip chip-token ${extraClass}"><input type="checkbox" name="${name}" value="${d.value}" />${d.label}</label>`
+        `<label class="filter-menu-item"><input type="checkbox" name="${name}" value="${d.value}" />${escapeHtml(d.label)}</label>`
     )
     .join("");
 }
@@ -102,6 +130,7 @@ function applyPreferences(prefs) {
   document.querySelectorAll("#health-condition-options input").forEach((el) => {
     el.checked = (prefs.health_conditions || []).includes(el.value);
   });
+  updateAllFilterCounts();
 }
 
 function schedulePrefsSave() {
@@ -128,16 +157,28 @@ async function savePreferences() {
   }
 }
 
+function closeResultsTab() {
+  $("results-tab")?.classList.add("hidden");
+}
+
+function openResultsTab() {
+  $("results-tab")?.classList.remove("hidden");
+}
+
+function closeRecipeTab() {
+  $("recipe-tab")?.classList.add("hidden");
+}
+
 function hideAllPanels() {
   [
     "landing-panel",
     "search-panel",
-    "results-panel",
     "inspired-panel",
     "judge-panel",
     "cook-panel",
-    "recipe-panel",
   ].forEach((id) => $(id)?.classList.add("hidden"));
+  closeResultsTab();
+  closeRecipeTab();
 }
 
 function showLanding() {
@@ -195,21 +236,31 @@ function renderMealCard(recipe) {
   const img = recipe.image
     ? `<img class="result-thumb" src="${escapeHtml(recipe.image)}" alt="" loading="lazy" />`
     : `<div class="result-thumb result-thumb-placeholder" aria-hidden="true"></div>`;
+  const ingredients = recipe.ingredient_names || [];
+  const ingList = ingredients.length
+    ? `<ul>${ingredients.slice(0, 14).map((i) => `<li>${escapeHtml(i)}</li>`).join("")}${ingredients.length > 14 ? `<li>+ ${ingredients.length - 14} more</li>` : ""}</ul>`
+    : `<p>Hover unavailable — open for full list.</p>`;
   return `
-    <label class="meal-card ${catClass} ${checked ? "meal-card-selected" : ""}">
-      <input type="checkbox" class="meal-select" data-recipe-id="${recipe.id}" ${checked ? "checked" : ""} />
+    <article class="meal-card ${catClass} ${checked ? "meal-card-selected" : ""}" data-recipe-id="${recipe.id}">
+      <div class="meal-card-hover-ingredients" aria-hidden="true">
+        <strong>Ingredients</strong>
+        ${ingList}
+      </div>
       <div class="meal-card-inner">
+        <label class="meal-card-select-label">
+          <input type="checkbox" class="meal-select" data-recipe-id="${recipe.id}" ${checked ? "checked" : ""} />
+          <span class="sr-only">Select for inspire dash</span>
+        </label>
         ${img}
         <div class="meal-card-body">
           <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}${recipe.thread_label ? ` · ${escapeHtml(recipe.thread_label)}` : ""}</span>
           <strong class="result-title">${escapeHtml(recipe.title)}</strong>
           ${recipe.fit_note ? `<p class="meal-card-fit">${escapeHtml(recipe.fit_note)}</p>` : ""}
-          ${recipe.summary ? `<p class="meal-card-summary">${escapeHtml(recipe.summary)}</p>` : ""}
           ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
-          <button type="button" class="btn-ghost btn-small view-recipe-btn" data-view-recipe="${recipe.id}">View recipe</button>
+          <button type="button" class="btn-ghost btn-small meal-card-open-btn view-recipe-btn" data-view-recipe="${recipe.id}">Cook this — AI steps</button>
         </div>
       </div>
-    </label>`;
+    </article>`;
 }
 
 function updateSelectionUI() {
@@ -327,45 +378,10 @@ function renderChefInsight(data) {
     ${bridgeHtml}`;
 }
 
-function renderProteinPrompt(parsed) {
-  const block = $("protein-prompt");
-  const options = $("protein-options");
-  if (!block || !options) return;
-
-  const choices = parsed?.protein_options || [];
-  if (!choices.length) {
-    block.classList.add("hidden");
-    options.innerHTML = "";
-    return;
-  }
-
-  block.classList.remove("hidden");
-  const active = proteinFilterExplicit
-    ? (selectedProteinFilter || "")
-    : (parsed.protein || "");
-
-  options.innerHTML = [
-    `<button type="button" class="protein-chip${active === "" ? " active" : ""}" data-protein="">All proteins</button>`,
-    ...choices.map(
-      (p) =>
-        `<button type="button" class="protein-chip${active === p ? " active" : ""}" data-protein="${escapeHtml(p)}">${escapeHtml(p)}</button>`
-    ),
-  ].join("");
-
-  options.querySelectorAll(".protein-chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const protein = btn.dataset.protein || null;
-      if (protein === selectedProteinFilter) return;
-      selectedProteinFilter = protein;
-      runSearch({ proteinFilter: protein });
-    });
-  });
-}
-
 function renderCravingResults(data, opts = {}) {
   lastCraving = data;
   if (!opts.preserveSelection) selectedIds = new Set();
-  $("results-panel").classList.remove("hidden");
+  openResultsTab();
   $("inspired-panel").classList.add("hidden");
   $("judge-panel").classList.add("hidden");
   $("cook-panel").classList.add("hidden");
@@ -383,16 +399,8 @@ function renderCravingResults(data, opts = {}) {
     : "No matches yet.");
   renderChefInsight(data);
   renderParsedCraving(parsed);
-  renderProteinPrompt(parsed);
 
-  let list = $("recipes-list");
-  if (!list) {
-    const panel = $("results-panel");
-    list = document.createElement("div");
-    list.id = "recipes-list";
-    list.className = "meal-card-grid results-scroll";
-    panel?.appendChild(list);
-  }
+  const list = $("recipes-list");
 
   if (!total) {
     list.innerHTML = `<p class="hint">No matches. Try tacos, pasta, chicken, or loosen diet filters.</p>`;
@@ -403,7 +411,20 @@ function renderCravingResults(data, opts = {}) {
   list.innerHTML = recipes.map((r) => renderMealCard(r)).join("");
   bindMealCards(list);
   updateSelectionUI();
-  $("results-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("results-tab")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function searchFilterPayload() {
+  const proteins = selectedProteins();
+  const sides = selectedSides();
+  return {
+    diets: selectedDiets(),
+    intolerances: selectedIntolerances(),
+    health_conditions: selectedHealthConditions(),
+    protein_filters: proteins,
+    protein_filter: proteins[0] || null,
+    side_filters: sides,
+  };
 }
 
 async function runSearch(opts = {}) {
@@ -411,15 +432,6 @@ async function runSearch(opts = {}) {
   if (!text) {
     setStatus($("search-status"), "Tell me what sounds good first.", true);
     return;
-  }
-  if (!opts.refine) {
-    if (!("proteinFilter" in opts)) {
-      selectedProteinFilter = null;
-      proteinFilterExplicit = false;
-    } else {
-      selectedProteinFilter = opts.proteinFilter;
-      proteinFilterExplicit = true;
-    }
   }
   setStatus(
     $("search-status"),
@@ -430,11 +442,8 @@ async function runSearch(opts = {}) {
     await savePreferences();
     const body = {
       what_sounds_good: text,
-      diets: selectedDiets(),
-      intolerances: selectedIntolerances(),
-      health_conditions: selectedHealthConditions(),
+      ...searchFilterPayload(),
     };
-    if (proteinFilterExplicit) body.protein_filter = selectedProteinFilter || null;
     if (opts.refine && selectedIds.size) {
       body.selected_recipe_ids = [...selectedIds];
     }
@@ -516,7 +525,7 @@ function renderChefProposal(proposal) {
 async function openInspiredPanel() {
   if (!selectedIds.size) return;
   setStatus($("inspired-status"), "Building your inspire dash…");
-  $("results-panel").classList.add("hidden");
+  closeResultsTab();
   $("judge-panel").classList.add("hidden");
   $("cook-panel").classList.add("hidden");
   $("inspired-panel").classList.remove("hidden");
@@ -813,10 +822,9 @@ async function flushPendingSave() {
 
 async function openRecipe(id) {
   currentRecipeId = id;
-  hideAllPanels();
-  $("recipe-panel").classList.remove("hidden");
+  $("recipe-tab")?.classList.remove("hidden");
   $("recipe-title").textContent = "Loading…";
-  $("recipe-steps").innerHTML = "";
+  $("recipe-steps").innerHTML = "<li class='hint'>Chef is writing your steps…</li>";
   try {
     const detail = await api(`/recipes/${id}`);
     $("recipe-title").textContent = detail.title;
@@ -839,18 +847,25 @@ async function openRecipe(id) {
 async function loadRecipeSteps() {
   if (!currentRecipeId) return;
   const explain = stepMode === "beginner" && $("explain-techniques").checked;
+  const filters = searchFilterPayload();
   const data = await api(`/recipes/${currentRecipeId}/simplify`, {
     method: "POST",
     body: JSON.stringify({
       explain_techniques: explain,
       skill_level: explain ? "beginner" : "direct",
+      what_sounds_good: soundsGoodText() || null,
+      protein_filters: filters.protein_filters,
+      side_filters: filters.side_filters,
+      diets: filters.diets,
+      intolerances: filters.intolerances,
+      health_conditions: filters.health_conditions,
     }),
   });
   $("recipe-steps").innerHTML = data.steps
     .map(
       (s) =>
-        `<li><strong>Step ${s.step}.</strong> ${s.text}${
-          s.tip ? `<span class="step-tip">${s.tip}</span>` : ""
+        `<li><strong>Step ${s.step}.</strong> ${escapeHtml(s.text)}${
+          s.tip ? `<span class="step-tip">${escapeHtml(s.tip)}</span>` : ""
         }</li>`
     )
     .join("");
@@ -880,9 +895,12 @@ async function bootstrap() {
     const health = await api("/healthz");
     if ($("build-tag") && health.version) $("build-tag").textContent = `Build ${health.version}`;
     meta = await api("/search/meta");
-    renderChipOptions("diet-options", meta.diets, "diet", "chip-diet");
-    renderChipOptions("intolerance-options", meta.intolerances, "intolerance", "chip-allergy");
-    renderChipOptions("health-condition-options", meta.health_conditions, "health-condition", "chip-medical");
+    renderFilterMenu("diet-options", meta.diets, "diet");
+    renderFilterMenu("intolerance-options", meta.intolerances, "intolerance");
+    renderFilterMenu("health-condition-options", meta.health_conditions, "health-condition");
+    renderFilterMenu("protein-options", meta.protein_options, "protein");
+    renderFilterMenu("side-options", meta.side_options, "side");
+    updateAllFilterCounts();
     const badge = $("mock-badge");
     if (badge) {
       if (meta.mock_mode || !meta.spoonacular_configured) {
@@ -986,9 +1004,12 @@ $("re-pitch-btn")?.addEventListener("click", async () => {
 });
 $("save-recipe-btn")?.addEventListener("click", saveCurrentRecipe);
 
+$("close-results-tab")?.addEventListener("click", closeResultsTab);
+$("close-recipe-tab")?.addEventListener("click", closeRecipeTab);
+
 $("back-to-results")?.addEventListener("click", () => {
   $("inspired-panel").classList.add("hidden");
-  $("results-panel").classList.remove("hidden");
+  openResultsTab();
 });
 
 $("back-to-inspired-from-judge")?.addEventListener("click", () => {
@@ -1031,10 +1052,11 @@ $("guest-save-form")?.addEventListener("submit", async (e) => {
   }
 });
 
-$("back-from-recipe")?.addEventListener("click", () => {
-  $("recipe-panel").classList.add("hidden");
-  if (inspiredSetup) $("inspired-panel").classList.remove("hidden");
-  else $("results-panel").classList.remove("hidden");
+$("sounds-good-input")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    runSearch();
+  }
 });
 
 function setStepMode(mode) {
@@ -1068,11 +1090,34 @@ document.addEventListener("change", (e) => {
     )
   ) {
     schedulePrefsSave();
+    updateAllFilterCounts();
+  }
+  if (e.target.matches("#protein-options input, #side-options input")) {
+    updateAllFilterCounts();
   }
   if (e.target.matches(".pantry-have")) {
     approvedSubs = [];
     scheduleSubstitutionFetch();
   }
+});
+
+document.querySelectorAll(".filter-dropdown-trigger").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const parent = btn.closest(".filter-dropdown");
+    document.querySelectorAll(".filter-dropdown.open").forEach((d) => {
+      if (d !== parent) d.classList.remove("open");
+    });
+    parent?.classList.toggle("open");
+  });
+});
+
+document.querySelectorAll(".filter-dropdown").forEach((dd) => {
+  dd.addEventListener("click", (e) => e.stopPropagation());
+});
+
+document.addEventListener("click", () => {
+  document.querySelectorAll(".filter-dropdown.open").forEach((d) => d.classList.remove("open"));
 });
 
 bootstrap();
