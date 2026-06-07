@@ -531,11 +531,14 @@ function renderParsedCraving(parsed) {
     return;
   }
   const chips = [];
-  for (const term of parsed.search_terms || []) {
-    if (term) chips.push(term);
+  if (parsed.main_query) chips.push(parsed.main_query);
+  if (parsed.protein) chips.push(parsed.protein);
+  if (parsed.mood) chips.push(parsed.mood);
+  for (const f of parsed.flavors || []) {
+    if (f) chips.push(f);
   }
-  for (const note of parsed.flavor_notes || []) {
-    if (note) chips.push(note);
+  for (const term of parsed.search_terms || []) {
+    if (term && !chips.includes(term)) chips.push(term);
   }
   if (!chips.length) {
     for (const th of parsed.craving_threads || []) {

@@ -14,9 +14,8 @@ from app.services.allrecipes_scraper import (
     gather_search_hits,
     url_to_recipe_id,
 )
-from app.services.chef_agent import analyze_craving
 from app.services.chef_relevance import collect_match_terms, is_relevant_main
-from app.services.dish_families import detect_dish_anchor
+from app.services.craving_translator import translate_craving
 from app.services.grok_recipe_store import put_many
 from app.services.xai_client import chat_completion
 
@@ -64,7 +63,8 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(cleaned)
 
 
-def _search_queries(what_sounds_good: str, plan: dict[str, Any]) -> list[str]:
+def _search_queries(plan: dict[str, Any]) -> list[str]:
+    """Use translator-built queries only — never the raw sentence."""
     queries: list[str] = []
     seen: set[str] = set()
 
@@ -74,20 +74,27 @@ def _search_queries(what_sounds_good: str, plan: dict[str, Any]) -> list[str]:
             seen.add(q.lower())
             queries.append(q)
 
-    add(what_sounds_good[:80])
-    for term in plan.get("search_terms") or []:
+    for term in plan.get("search_queries") or plan.get("search_terms") or []:
         add(str(term))
-    for thread in plan.get("craving_threads") or []:
-        for term in (thread.get("search_terms") or [])[:6]:
-            add(str(term))
-    protein = plan.get("protein")
-    if protein and protein != "vegetarian":
-        add(f"{protein} {what_sounds_good[:40]}")
-    return queries[:6]
+    return queries[:10]
 
 
-def _title_matches_craving(title: str, what_sounds_good: str, plan: dict[str, Any]) -> bool:
+def _title_matches_craving(
+    title: str,
+    what_sounds_good: str,
+    plan: dict[str, Any],
+    *,
+    search_query: str = "",
+) -> bool:
     lower = title.lower()
+    sq = (search_query or "").lower()
+    if sq:
+        for word in re.findall(r"[a-z]{3,}", sq):
+            if word not in _STOP and word in lower:
+                return True
+    for kw in plan.get("match_keywords") or []:
+        if kw in lower:
+            return True
     terms = collect_match_terms(plan, what_sounds_good)
     for term in terms:
         if term in lower:
@@ -113,7 +120,9 @@ def _filter_hits(hits: list[dict[str, Any]], plan: dict[str, Any], what_sounds_g
         title = hit.get("title") or ""
         if not _is_main_title(title):
             continue
-        if not _title_matches_craving(title, what_sounds_good, plan):
+        if not _title_matches_craving(
+            title, what_sounds_good, plan, search_query=hit.get("search_query") or ""
+        ):
             continue
         out.append(hit)
     return out
@@ -197,10 +206,8 @@ async def search_craving_lineup(
     cuisine_filters = cuisine_filters or []
     selected_recipe_ids = (selected_recipe_ids or [])[:5]
 
-    plan, _ = await analyze_craving(what_sounds_good, protein_filter=protein_filter)
-    anchor, _ = detect_dish_anchor(what_sounds_good)
-    plan["user_dish_anchor"] = bool(anchor)
-    plan["dish_anchor"] = anchor
+    plan, _ = await translate_craving(what_sounds_good, protein_filter=protein_filter)
+    anchor = plan.get("dish_anchor")
     if protein_filters:
         plan["protein"] = protein_filters[0]
     if cuisine_filters:
@@ -210,9 +217,14 @@ async def search_craving_lineup(
     plan["intolerances"] = intolerances
     plan["health_conditions"] = health_conditions
 
-    queries = _search_queries(what_sounds_good, plan)
+    queries = _search_queries(plan)
+    if not queries:
+        queries = [what_sounds_good.strip()[:40]] if what_sounds_good.strip() else ["dinner"]
     hits = await gather_search_hits(queries, per_query=14)
-    hits = _filter_hits(hits, plan, what_sounds_good)
+    if hits:
+        hits = _filter_hits(hits, plan, what_sounds_good)
+    if not hits:
+        hits = await gather_search_hits(queries[:3], per_query=20)
     hits.sort(
         key=lambda h: (
             -(h.get("rating_count") or 0),
@@ -255,14 +267,26 @@ async def search_craving_lineup(
         meta = meta_by_url.get(url, {})
         card["fit_note"] = meta.get("fit_note") or card.get("fit_note")
         card["thread_label"] = meta.get("thread_label") or "AllRecipes"
+        if meta.get("search_query"):
+            card["source_queries"] = [meta["search_query"]]
         card["is_popular"] = (card.get("rating_count") or 0) >= 50
         title = card.get("title") or ""
         if not _is_main_title(title):
             continue
+        sq = meta.get("search_query") or ""
         if is_relevant_main(card, plan, what_sounds_good=what_sounds_good)[0]:
             lineup.append(card)
-        elif _title_matches_craving(title, what_sounds_good, plan):
+        elif _title_matches_craving(title, what_sounds_good, plan, search_query=sq):
             lineup.append(card)
+
+    if not lineup and cards:
+        for card in cards:
+            title = card.get("title") or ""
+            if not _is_main_title(title):
+                continue
+            lineup.append(card)
+            if len(lineup) >= PAGE_SIZE:
+                break
 
     # Preserve user selections on refine
     if selected_recipe_ids:
@@ -279,16 +303,20 @@ async def search_craving_lineup(
 
     threads = plan.get("craving_threads") or []
     parsed = {
-        "search_mode": "grok_allrecipes",
+        "search_mode": plan.get("search_mode") or "grok_allrecipes",
         "craving_threads": threads,
         "dish_anchor": anchor if plan.get("user_dish_anchor") else None,
-        "dish_queries": queries,
+        "dish_queries": plan.get("dish_queries") or [],
         "protein": plan.get("protein"),
+        "protein_query": plan.get("protein_query"),
+        "ingredients": plan.get("ingredients") or [],
+        "starches": plan.get("starches") or [],
+        "flavors": plan.get("flavors") or [],
         "cuisine": plan.get("cuisine"),
-        "flavor_notes": plan.get("flavor_notes") or [],
-        "main_query": what_sounds_good,
-        "search_terms": plan.get("search_terms") or queries,
-        "needs_protein_prompt": not plan.get("protein"),
+        "mood": plan.get("mood"),
+        "main_query": plan.get("main_query") or what_sounds_good,
+        "search_terms": plan.get("search_queries") or queries,
+        "needs_protein_prompt": plan.get("needs_protein_prompt", not plan.get("protein")),
         "protein_options": plan.get("protein_options") or [],
     }
 
@@ -306,8 +334,9 @@ async def search_craving_lineup(
         "what_sounds_good": what_sounds_good,
         "parsed": parsed,
         "recipes": lineup,
-        "chef_headline": grok_data.get("chef_headline") or plan.get("chef_headline"),
-        "chef_intro": grok_data.get("chef_intro") or plan.get("chef_intro"),
+        "chef_headline": grok_data.get("chef_headline") or plan.get("chef_headline") or "",
+        "chef_intro": grok_data.get("chef_intro") or plan.get("chef_intro") or "",
+        "translated_queries": queries,
         "craving_threads": threads,
         "page_size": PAGE_SIZE,
         "popular_top": 3,

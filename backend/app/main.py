@@ -33,7 +33,7 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 # Bump when shipping UI changes — breaks browser cache for static assets.
-APP_VERSION = os.environ.get("APP_VERSION", "20250608-prompt-only")
+APP_VERSION = os.environ.get("APP_VERSION", "20250608-translator")
 
 
 @asynccontextmanager

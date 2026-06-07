@@ -184,9 +184,11 @@ def collect_match_terms(plan: dict[str, Any], what_sounds_good: str) -> list[str
             seen.add(t)
             out.append(t)
 
+    for kw in plan.get("match_keywords") or []:
+        add(str(kw))
     for w in _query_words(what_sounds_good):
         add(w)
-    for term in plan.get("search_terms") or []:
+    for term in plan.get("search_terms") or plan.get("search_queries") or []:
         add(str(term))
     for thread in plan.get("craving_threads") or []:
         for term in thread.get("search_terms") or []:
@@ -244,9 +246,19 @@ def is_relevant_main(
         if term in title:
             return True, term
 
+    for kw in plan.get("match_keywords") or []:
+        if kw in title:
+            return True, kw
+
     for w in _query_words(what_sounds_good):
         if len(w) >= 4 and w in title:
             return True, w
+
+    source_q = " ".join(card.get("source_queries") or [])
+    if source_q:
+        for word in re.findall(r"[a-z]{3,}", source_q.lower()):
+            if len(word) >= 4 and word in title:
+                return True, word
 
     return False, ""
 
