@@ -198,14 +198,24 @@ def rank_craving_results(
         enriched["_popularity"] = _popularity(card)
         eligible.append(enriched)
 
-    # If filters were too tight, relax and fill the page
-    if len(eligible) < PAGE_SIZE:
+    # Fill the page only for broad dish searches — never pad protein-filtered dish queries
+    dish_anchor = parsed.get("dish_anchor")
+    protein = parsed.get("protein")
+    need_fill = len(eligible) < PAGE_SIZE
+    if dish_anchor and protein:
+        need_fill = len(eligible) < 3
+    if need_fill and len(eligible) < PAGE_SIZE:
         seen = {c["id"] for c in eligible}
         relaxed = []
         for card in candidates:
             if card["id"] in seen:
                 continue
             if not _passes_inclusion(card, parsed, strict=False):
+                continue
+            if dish_anchor and protein and not (
+                matches_dish_family(card, dish_anchor)
+                or matches_source_query(card, parsed.get("dish_queries") or [])
+            ):
                 continue
             enriched = dict(card)
             enriched["_relevance"] = _relevance(card, parsed)
