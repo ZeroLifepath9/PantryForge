@@ -323,6 +323,18 @@ function renderCravingResults(data) {
   $("results-message").textContent = data.message || (total
     ? `${total} recipe${total === 1 ? "" : "s"} to inspire your own creation.`
     : "No matches yet.");
+  const chefBlock = $("chef-insight");
+  if (chefBlock) {
+    if (data.chef_headline || data.chef_intro) {
+      chefBlock.classList.remove("hidden");
+      chefBlock.innerHTML = `
+        ${data.chef_headline ? `<h3>${escapeHtml(data.chef_headline)}</h3>` : ""}
+        ${data.chef_intro ? `<p>${escapeHtml(data.chef_intro)}</p>` : ""}`;
+    } else {
+      chefBlock.classList.add("hidden");
+      chefBlock.innerHTML = "";
+    }
+  }
   renderParsedCraving(parsed);
   renderProteinPrompt(parsed);
 
@@ -672,10 +684,10 @@ async function bootstrap() {
     renderChipOptions("health-condition-options", meta.health_conditions, "health-condition", "chip-medical");
     const badge = $("mock-badge");
     if (badge) {
-      if (meta.mock_mode) {
+      if (meta.mock_mode || !meta.spoonacular_configured) {
         badge.textContent = meta.spoonacular_configured
-          ? "Partial demo mode"
-          : "Demo recipes — API keys not active";
+          ? "Demo mode"
+          : "API keys not detected on server";
         badge.classList.remove("hidden");
       } else {
         badge.classList.add("hidden");

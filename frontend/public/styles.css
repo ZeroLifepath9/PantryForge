@@ -395,6 +395,27 @@ textarea { resize: vertical; min-height: 5rem; }
   font-size: 0.85rem;
 }
 
+.chef-results-insight {
+  margin: 0.75rem 0 1rem;
+  padding: 1rem 1.1rem;
+  background: linear-gradient(135deg, #fff8f0 0%, #f3e0d4 100%);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--accent);
+}
+
+.chef-results-insight h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+  color: var(--accent);
+}
+
+.chef-results-insight p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
 .protein-prompt {
   margin-bottom: 1rem;
   padding: 0.85rem 1rem;

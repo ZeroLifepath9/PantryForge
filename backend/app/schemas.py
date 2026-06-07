@@ -233,8 +233,11 @@ class CravingSearchResponse(BaseModel):
     what_sounds_good: str
     parsed: CravingParsed
     recipes: list[MealRecipeCard] = []
+    chef_headline: str | None = None
+    chef_intro: str | None = None
     page_size: int = 25
     popular_top: int = 5
+    candidate_count: int = 0
     mock: bool = False
     live: bool = False
     message: str | None = None

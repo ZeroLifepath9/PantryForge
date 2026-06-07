@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 import sys
 from pathlib import Path
@@ -7,6 +8,26 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEV_JWT = "dev-only-change-in-production"
+
+# Env names users actually set on Render / local .env
+SPOONACULAR_ENV_NAMES = (
+    "SPOONACULAR_API_KEY",
+    "SPOONACULAR_KEY",
+    "SPOONACULARKEY",
+    "spoonacular_API_KEY",
+    "spoonacular_api_key",
+    "SPOONACULAR_API",
+)
+
+XAI_ENV_NAMES = (
+    "XAI_API_KEY",
+    "XAI_KEY",
+    "xai_API_KEY",
+    "xai_api_key",
+    "XAI_API",
+    "GROK_API_KEY",
+    "GROK_KEY",
+)
 
 
 def _env_value(*names: str) -> str:
@@ -17,20 +38,46 @@ def _env_value(*names: str) -> str:
     return ""
 
 
+def _scan_env_by_pattern(pattern: re.Pattern[str]) -> tuple[str, str]:
+    """Return (env_var_name, value) for first matching non-empty key."""
+    for key, value in os.environ.items():
+        if not value or not value.strip():
+            continue
+        if pattern.search(key):
+            return key, value.strip()
+    return "", ""
+
+
 def _resolved_spoonacular_key() -> str:
-    return _env_value(
-        "SPOONACULAR_API_KEY",
-        "spoonacular_API_KEY",
-        "SPOONACULAR_KEY",
-    )
+    direct = _env_value(*SPOONACULAR_ENV_NAMES)
+    if direct:
+        return direct
+    _, scanned = _scan_env_by_pattern(re.compile(r"spoonacular", re.I))
+    return scanned
 
 
 def _resolved_xai_key() -> str:
-    return _env_value(
-        "XAI_API_KEY",
-        "xai_API_KEY",
-        "XAI_KEY",
-    )
+    direct = _env_value(*XAI_ENV_NAMES)
+    if direct:
+        return direct
+    _, scanned = _scan_env_by_pattern(re.compile(r"(xai|grok)", re.I))
+    return scanned
+
+
+def _spoonacular_env_name() -> str | None:
+    for name in SPOONACULAR_ENV_NAMES:
+        if os.environ.get(name, "").strip():
+            return name
+    key, val = _scan_env_by_pattern(re.compile(r"spoonacular", re.I))
+    return key if val else None
+
+
+def _xai_env_name() -> str | None:
+    for name in XAI_ENV_NAMES:
+        if os.environ.get(name, "").strip():
+            return name
+    key, val = _scan_env_by_pattern(re.compile(r"(xai|grok)", re.I))
+    return key if val else None
 
 
 def _valid_jwt(secret: str) -> bool:
@@ -70,19 +117,19 @@ class Settings(BaseSettings):
 
     @property
     def spoonacular_key(self) -> str:
-        return _resolved_spoonacular_key() or self.spoonacular_api_key
+        return _resolved_spoonacular_key() or self.spoonacular_api_key.strip()
 
     @property
     def xai_key(self) -> str:
-        return _resolved_xai_key() or self.xai_api_key
+        return _resolved_xai_key() or self.xai_api_key.strip()
 
     @property
     def mock_mode(self) -> bool:
+        # Any Spoonacular key → live recipe search
+        if self.spoonacular_key:
+            return False
         explicit = _env_value("USE_MOCK_DATA").lower()
         if explicit in ("0", "false", "no"):
-            return False
-        # Live APIs when keys are present (even if USE_MOCK_DATA defaulted true).
-        if self.spoonacular_key or self.xai_key:
             return False
         if explicit in ("1", "true", "yes"):
             return True
@@ -150,9 +197,20 @@ def validate_production_settings() -> None:
         if render_url:
             settings.cors_origins = render_url
 
+    spoon_var = _spoonacular_env_name()
+    xai_var = _xai_env_name()
     print(
         f"[pantry-forge] startup: env={settings.env} mock_mode={settings.mock_mode} "
-        f"spoonacular={'set' if settings.spoonacular_key else 'off'} "
-        f"xai={'set' if settings.xai_key else 'off'}",
+        f"spoonacular={'set' if settings.spoonacular_key else 'MISSING'}"
+        f"{f' ({spoon_var})' if spoon_var else ''} "
+        f"xai={'set' if settings.xai_key else 'MISSING'}"
+        f"{f' ({xai_var})' if xai_var else ''}",
         flush=True,
     )
+    if settings.is_production and not settings.spoonacular_key:
+        print(
+            "[pantry-forge] ERROR: SPOONACULAR_API_KEY not found in environment. "
+            "Set it in Render → Environment. Demo data only until fixed.",
+            file=sys.stderr,
+            flush=True,
+        )

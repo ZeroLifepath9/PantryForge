@@ -25,7 +25,7 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 # Bump when shipping UI changes — breaks browser cache for static assets.
-APP_VERSION = os.environ.get("APP_VERSION", "20250606-breadth")
+APP_VERSION = os.environ.get("APP_VERSION", "20250606-chef-live")
 
 
 @asynccontextmanager
@@ -62,6 +62,8 @@ app.include_router(cook_router)
 
 
 def _health_payload() -> dict:
+    from app.config import _spoonacular_env_name, _xai_env_name
+
     return {
         "status": "ok",
         "app": "alchemy-pantry",
@@ -69,6 +71,8 @@ def _health_payload() -> dict:
         "mock_mode": settings.mock_mode,
         "xai_configured": bool(settings.xai_key),
         "spoonacular_configured": bool(settings.spoonacular_key),
+        "spoonacular_env": _spoonacular_env_name(),
+        "xai_env": _xai_env_name(),
         "env": settings.env,
     }
 
