@@ -188,6 +188,84 @@ def enrich_search_plan(
     return plan
 
 
+def collect_match_terms(plan: dict[str, Any], what_sounds_good: str) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def add(term: str) -> None:
+        t = term.strip().lower()
+        if len(t) >= 3 and t not in seen:
+            seen.add(t)
+            out.append(t)
+
+    for w in _query_words(what_sounds_good):
+        add(w)
+    for thread in plan.get("craving_threads") or []:
+        for term in thread.get("search_terms") or []:
+            add(str(term))
+    for term in plan.get("street_food_terms") or []:
+        add(str(term))
+    for term in plan.get("family_adjacent_queries") or []:
+        add(str(term))
+    anchor = plan.get("dish_anchor")
+    if anchor:
+        for kw in dish_keywords(anchor):
+            add(kw)
+    return sorted(out, key=len, reverse=True)
+
+
+def is_relevant_main(
+    card: dict[str, Any],
+    plan: dict[str, Any],
+    *,
+    what_sounds_good: str = "",
+) -> tuple[bool, str]:
+    """Strict gate: title/phrase/family match + active filters. No filler."""
+    if card.get("category") in ("side", "salad", "dip"):
+        return False, ""
+
+    title = (card.get("title") or "").lower()
+    anchor = plan.get("dish_anchor")
+    cuisine_filters = plan.get("cuisine_filters") or []
+
+    if cuisine_filters and not _matches_cuisine(card, cuisine_filters, dish_anchor=anchor):
+        return False, ""
+
+    protein = (plan.get("protein") or "").strip().lower()
+    if protein:
+        if protein == "vegetarian":
+            diets_set = {d.lower() for d in (card.get("diets") or [])}
+            veg_markers = ("vegetarian", "vegan", "tofu", "bean", "lentil", "meatless")
+            if "vegetarian" not in diets_set and "vegan" not in diets_set:
+                if not any(m in title for m in veg_markers):
+                    return False, ""
+        elif not mentions_protein(card, protein):
+            return False, ""
+
+    terms = collect_match_terms(plan, what_sounds_good)
+
+    if anchor:
+        if matches_dish_family(card, anchor):
+            for term in terms:
+                if term in title:
+                    return True, term
+            return True, anchor.replace("_", " ")
+        for term in terms:
+            if term in title and any(kw in term for kw in dish_keywords(anchor)):
+                return True, term
+        return False, ""
+
+    for term in terms:
+        if term in title:
+            return True, term
+
+    for w in _query_words(what_sounds_good):
+        if len(w) >= 4 and w in title:
+            return True, w
+
+    return False, ""
+
+
 def score_candidate(
     card: dict[str, Any],
     plan: dict[str, Any],
@@ -274,9 +352,10 @@ def rank_and_filter_candidates(
     plan: dict[str, Any],
     *,
     what_sounds_good: str = "",
-    max_pool: int = 70,
-    min_score: float = 10.0,
+    max_pool: int = 12,
+    min_score: float = 12.0,
     mains_only: bool = False,
+    strict: bool = True,
 ) -> list[dict[str, Any]]:
     if not candidates:
         return []
@@ -286,19 +365,24 @@ def rank_and_filter_candidates(
 
     scored: list[tuple[dict[str, Any], float]] = []
     for card in candidates:
+        if strict:
+            ok, match_term = is_relevant_main(card, plan, what_sounds_good=what_sounds_good)
+            if not ok:
+                continue
+        else:
+            match_term = ""
+
         s = score_candidate(card, plan, what_sounds_good=what_sounds_good)
+        if s < min_score:
+            continue
         enriched = dict(card)
         enriched["_relevance"] = s
+        if match_term:
+            enriched["_match_term"] = match_term
         scored.append((enriched, s))
 
     scored.sort(key=lambda x: x[1], reverse=True)
-    strong = [c for c, s in scored if s >= min_score]
-    pool = strong if len(strong) >= 12 else [c for c, _ in scored]
-
-    if mains_only:
-        pool = [c for c in pool if c.get("category") not in ("side", "salad", "dip")]
-
-    return pool[:max_pool]
+    return [c for c, _ in scored[:max_pool]]
 
 
 def pairing_cite_for_term(plan: dict[str, Any], term: str) -> str:

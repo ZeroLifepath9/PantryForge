@@ -969,29 +969,7 @@ def mock_craving_candidates(
         scored.append((card, score))
 
     scored.sort(key=lambda x: x[1], reverse=True)
-    cards = [card for card, _ in scored[:60]]
-    # Broad cravings: include any recipe that loosely matches a search term
-    if len(cards) < 25:
-        from app.services.search_terms import collect_search_terms
-
-        terms = [t.lower() for t in collect_search_terms(parsed, what_sounds_good)]
-        seen = {c["id"] for c in cards}
-        for recipe in MOCK_RECIPES:
-            if recipe["id"] in seen:
-                continue
-            if not _recipe_matches_diets(recipe, diets):
-                continue
-            if not _recipe_matches_intolerances(recipe, intolerances):
-                continue
-            if not _recipe_matches_health_conditions(recipe, health_conditions):
-                continue
-            blob = _craving_blob(recipe)
-            if any(t in blob for t in terms if len(t) > 2):
-                cards.append(_mock_card(recipe, _mock_recipe_category(recipe)))
-                seen.add(recipe["id"])
-            if len(cards) >= 25:
-                break
-    return cards[:60]
+    return [card for card, _ in scored[:60]]
 
 
 def mock_craving_search(

@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from app.config import settings
+from app.services.accent_side import pick_accent_side
 from app.services.cooking_ai import simplify_recipe
 from app.services.dish_families import detect_dish_anchor
 from app.services.xai_client import chat_completion
@@ -325,6 +326,15 @@ async def build_cook_kit(
 
     title = steps_result["title"]
     anchor = dish_anchor or _detect_anchor(title, what_sounds_good)
+    plan_stub = {"dish_anchor": anchor, "pairing_cites": {}}
+    accent = pick_accent_side(
+        dish_anchor=anchor,
+        side_filters=side_filters,
+        diets=diets,
+        intolerances=intolerances,
+        health_conditions=health_conditions,
+        plan=plan_stub,
+    )
 
     if not settings.xai_key or steps_mock:
         return {
@@ -332,8 +342,9 @@ async def build_cook_kit(
             "title": title,
             "mode": steps_result["mode"],
             "steps": steps_result["steps"],
-            "elevation_insights": _mock_insights(anchor, title),
-            "companions": _mock_companions(anchor),
+            "elevation_insights": _mock_insights(anchor, title)[:2],
+            "accent_side": accent,
+            "companions": [],
             "dish_anchor": anchor,
         }, True
 
@@ -351,14 +362,14 @@ async def build_cook_kit(
         )
         data = _extract_json(raw)
         insights = data.get("elevation_insights") or _mock_insights(anchor, title)
-        companions = data.get("companions") or _mock_companions(anchor)
         return {
             "recipe_id": recipe_id,
             "title": title,
             "mode": steps_result["mode"],
             "steps": steps_result["steps"],
-            "elevation_insights": insights[:4],
-            "companions": companions[:3],
+            "elevation_insights": insights[:2],
+            "accent_side": accent,
+            "companions": [],
             "dish_anchor": anchor,
         }, False
     except Exception:
@@ -367,7 +378,8 @@ async def build_cook_kit(
             "title": title,
             "mode": steps_result["mode"],
             "steps": steps_result["steps"],
-            "elevation_insights": _mock_insights(anchor, title),
-            "companions": _mock_companions(anchor),
+            "elevation_insights": _mock_insights(anchor, title)[:2],
+            "accent_side": accent,
+            "companions": [],
             "dish_anchor": anchor,
         }, True

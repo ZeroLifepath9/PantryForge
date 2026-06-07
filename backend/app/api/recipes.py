@@ -5,6 +5,7 @@ from app.database import get_db
 from app.deps import get_current_user, get_optional_user
 from app.models import User
 from app.schemas import (
+    AccentSide,
     CompanionRecipe,
     CookKitRequest,
     CookKitResponse,
@@ -125,6 +126,7 @@ async def cook_kit_endpoint(
         mode=result["mode"],
         steps=[SimplifiedStep(**s) for s in result["steps"]],
         elevation_insights=[ElevationInsight(**i) for i in result.get("elevation_insights") or []],
+        accent_side=AccentSide(**result["accent_side"]) if result.get("accent_side") else None,
         companions=[CompanionRecipe(**c) for c in result.get("companions") or []],
         dish_anchor=result.get("dish_anchor"),
         mock=is_mock,

@@ -316,45 +316,38 @@ function renderStepsList(steps) {
     .join("");
 }
 
+function renderAccentSide(side) {
+  if (!side) return "";
+  return `
+    <div class="accent-side-block">
+      <h4 class="cook-kit-subhead">Accent side — pairs with your main</h4>
+      <p class="accent-side-why"><strong>${escapeHtml(side.title)}</strong> — ${escapeHtml(side.why)}</p>
+      ${side.pairs_because ? `<p class="accent-side-pairs hint">Pairs because: ${escapeHtml(side.pairs_because)}</p>` : ""}
+      ${side.diet_note ? `<p class="accent-side-diet">${escapeHtml(side.diet_note)}</p>` : ""}
+      <h5>Ingredients</h5>
+      <ul>${(side.ingredients || []).map((ing) => `<li>${escapeHtml(ing)}</li>`).join("")}</ul>
+      <h5>Steps</h5>
+      <ol class="recipe-steps companion-steps">${renderStepsList(side.steps)}</ol>
+    </div>`;
+}
+
 function renderCookKitPanel(kit) {
   if (!kit) return "<p class='hint'>Loading cook steps…</p>";
+  if (kit.error) return `<p class="status error">${escapeHtml(kit.error)}</p>`;
   const insights = (kit.elevation_insights || [])
     .map(
       (i) =>
         `<div class="elevation-insight"><strong>${escapeHtml(i.heading)}</strong><p>${escapeHtml(i.body)}</p></div>`
     )
     .join("");
-  const companionList = kit.companions || [];
-  const chipsHtml = companionList
-    .map(
-      (c) =>
-        `<button type="button" class="companion-chip ${expandedCompanionKey === `${kit.recipe_id}:${c.key}` ? "active" : ""}" data-companion-key="${escapeHtml(c.key)}" data-recipe-id="${kit.recipe_id}">
-          <strong>${escapeHtml(c.title)}</strong>
-          <span>${escapeHtml(c.why)}</span>
-        </button>`
-    )
-    .join("");
-  const activeCompanion = companionList.find(
-    (c) => expandedCompanionKey === `${kit.recipe_id}:${c.key}`
-  );
-  const expandedHtml = activeCompanion
-    ? `<div class="companion-recipe-expanded">
-        <h5>${escapeHtml(activeCompanion.title)}</h5>
-        <p class="companion-why">${escapeHtml(activeCompanion.why)}</p>
-        <h5>Ingredients</h5>
-        <ul>${(activeCompanion.ingredients || []).map((ing) => `<li>${escapeHtml(ing)}</li>`).join("")}</ul>
-        <h5>Steps</h5>
-        <ol class="recipe-steps companion-steps">${renderStepsList(activeCompanion.steps)}</ol>
-      </div>`
-    : "";
 
   return `
     <div class="cook-kit-main">
       <h4 class="cook-kit-subhead">How to make it</h4>
       <ol class="recipe-steps">${renderStepsList(kit.steps)}</ol>
     </div>
-    ${insights ? `<div class="cook-kit-elevations"><h4 class="cook-kit-subhead">Take it to the next level</h4>${insights}</div>` : ""}
-    ${companionList.length ? `<div class="cook-kit-companions"><h4 class="cook-kit-subhead">Elevate with these</h4><p class="hint">Tap a companion for its full recipe and steps.</p><div class="companion-chips">${chipsHtml}</div>${expandedHtml}</div>` : ""}`;
+    ${renderAccentSide(kit.accent_side)}
+    ${insights ? `<div class="cook-kit-elevations"><h4 class="cook-kit-subhead">Chef tips</h4>${insights}</div>` : ""}`;
 }
 
 function renderSelectionDetail() {
@@ -405,14 +398,6 @@ function renderSelectionDetail() {
 
   const kit = cookKits.get(activeDetailId);
   body.innerHTML = renderCookKitPanel(kit);
-
-  body.querySelectorAll(".companion-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const key = `${chip.dataset.recipeId}:${chip.dataset.companionKey}`;
-      expandedCompanionKey = expandedCompanionKey === key ? null : key;
-      renderSelectionDetail();
-    });
-  });
 }
 
 async function loadCookKit(recipeId) {
@@ -588,7 +573,7 @@ function renderCravingResults(data, opts = {}) {
     ? `Chef's main courses (${total})`
     : "Chef's main courses";
   $("results-message").textContent = data.message || (total
-    ? `${total} mains — hover for ingredients, select for cook steps & elevation recipes.`
+    ? `${total} match${total === 1 ? "" : "es"} your search and filters — nothing else shown.`
     : "No matches yet.");
   renderParsedCraving(parsed);
 

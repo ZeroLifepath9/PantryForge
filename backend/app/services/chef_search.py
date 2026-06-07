@@ -8,7 +8,7 @@ from typing import Any
 
 from app.config import settings
 from app.services import mock_data
-from app.services.chef_agent import analyze_craving, curate_lineup
+from app.services.chef_agent import analyze_craving
 from app.services.chef_relevance import enrich_search_plan, rank_and_filter_candidates
 from app.services.dish_families import cuisine_for_anchor, family_adjacent_queries
 from app.services.spoonacular import complex_search
@@ -309,49 +309,28 @@ async def chef_search(
             health_conditions=health_conditions,
         )
 
+    plan["diets"] = diets
+    plan["intolerances"] = intolerances
+    plan["health_conditions"] = health_conditions
+
     candidates = rank_and_filter_candidates(
         candidates,
         plan,
         what_sounds_good=what_sounds_good,
-        max_pool=60,
-        min_score=8.0,
+        max_pool=PAGE_SIZE,
+        min_score=12.0,
         mains_only=True,
+        strict=True,
     )
 
-    recipes, curate_mock = await curate_lineup(
-        plan,
-        candidates,
-        selected_ids=selected_recipe_ids,
-        limit=PAGE_SIZE,
-        mains_only=True,
-    )
-
-    recipes = [r for r in recipes if _is_main_candidate(r)][:PAGE_SIZE]
-
-    if len(recipes) < PAGE_SIZE and fetch_mock:
-        from app.services import mock_data as md
-
-        seen = {r["id"] for r in recipes}
-        for recipe in md.MOCK_RECIPES:
-            if len(recipes) >= PAGE_SIZE:
-                break
-            if recipe["id"] in seen:
-                continue
-            cat = md._mock_recipe_category(recipe)
-            if cat in ("side", "salad", "dip"):
-                continue
-            c = md._mock_card(recipe, "main")
-            c["fit_note"] = "Another main worth comparing."
-            c["thread_label"] = "Chef's picks"
-            recipes.append(c)
-            seen.add(recipe["id"])
+    recipes = _lineup_from_scores(candidates, selected_recipe_ids, limit=PAGE_SIZE)
 
     live = use_live and not fetch_mock
 
     message = (
-        f"Chef's lineup: {len(recipes)} main courses inspired by what sounds good."
+        f"{len(recipes)} main{'s' if len(recipes) != 1 else ''} matching your search and filters."
         if recipes
-        else "No main courses found — try a broader craving, cuisine, or loosen diet filters."
+        else "No matches for that search — try different keywords or loosen diet/cuisine filters."
     )
     if not live and recipes:
         message = (
@@ -373,4 +352,36 @@ async def chef_search(
         "message": message,
         "live": live,
         "refined": bool(selected_recipe_ids),
-    }, analyze_mock and curate_mock and fetch_mock
+    }, analyze_mock and fetch_mock
+
+
+def _lineup_from_scores(
+    candidates: list[dict[str, Any]],
+    selected_ids: list[int],
+    *,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Top relevance picks only — never pad with unrelated recipes."""
+    by_id = {c["id"]: c for c in candidates}
+    locked: list[dict[str, Any]] = []
+    for sid in selected_ids:
+        if sid not in by_id:
+            continue
+        c = dict(by_id[sid])
+        mt = c.get("_match_term") or "your pick"
+        c["fit_note"] = f"Matches «{mt}» — your selection."
+        locked.append(c)
+
+    seen = {c["id"] for c in locked}
+    rest: list[dict[str, Any]] = []
+    for c in candidates:
+        if c["id"] in seen:
+            continue
+        cc = dict(c)
+        mt = cc.get("_match_term") or "your search"
+        cc["fit_note"] = f"Matches «{mt}» — fits your craving and filters."
+        cc["thread_label"] = cc.get("thread_label") or "Your search"
+        rest.append(cc)
+        if len(locked) + len(rest) >= limit:
+            break
+    return (locked + rest)[:limit]

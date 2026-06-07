@@ -151,6 +151,16 @@ class CompanionRecipe(BaseModel):
     steps: list[SimplifiedStep] = []
 
 
+class AccentSide(BaseModel):
+    key: str
+    title: str
+    why: str
+    pairs_because: str = ""
+    diet_note: str | None = None
+    ingredients: list[str] = []
+    steps: list[SimplifiedStep] = []
+
+
 class CookKitRequest(BaseModel):
     explain_techniques: bool | None = None
     skill_level: str | None = None
@@ -169,6 +179,7 @@ class CookKitResponse(BaseModel):
     mode: str
     steps: list[SimplifiedStep]
     elevation_insights: list[ElevationInsight] = []
+    accent_side: AccentSide | None = None
     companions: list[CompanionRecipe] = []
     dish_anchor: str | None = None
     mock: bool = False
