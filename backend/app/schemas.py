@@ -138,6 +138,42 @@ class SimplifyRecipeResponse(BaseModel):
     mock: bool = False
 
 
+class ElevationInsight(BaseModel):
+    heading: str
+    body: str
+
+
+class CompanionRecipe(BaseModel):
+    key: str
+    title: str
+    why: str
+    ingredients: list[str] = []
+    steps: list[SimplifiedStep] = []
+
+
+class CookKitRequest(BaseModel):
+    explain_techniques: bool | None = None
+    skill_level: str | None = None
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+    dish_anchor: str | None = Field(default=None, max_length=40)
+    protein_filters: list[str] = Field(default_factory=list, max_length=5)
+    side_filters: list[str] = Field(default_factory=list, max_length=8)
+    diets: list[str] = []
+    intolerances: list[str] = []
+    health_conditions: list[str] = []
+
+
+class CookKitResponse(BaseModel):
+    recipe_id: int
+    title: str
+    mode: str
+    steps: list[SimplifiedStep]
+    elevation_insights: list[ElevationInsight] = []
+    companions: list[CompanionRecipe] = []
+    dish_anchor: str | None = None
+    mock: bool = False
+
+
 class DietOption(BaseModel):
     value: str
     label: str

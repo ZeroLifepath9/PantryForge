@@ -54,7 +54,7 @@ async def simplify_recipe(
         return None, True
 
     direct = skill_level == "direct" or not explain_techniques
-    if not settings.xai_api_key or is_mock_detail:
+    if not settings.xai_key or is_mock_detail:
         result = mock_data.mock_simplify_steps(
             recipe_id,
             explain_techniques=explain_techniques,

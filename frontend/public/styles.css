@@ -291,6 +291,24 @@ textarea { resize: vertical; min-height: 5rem; }
   padding: 1rem 1.25rem 2rem;
 }
 
+.results-fullpage {
+  padding: 0.65rem 1.5rem 2rem;
+}
+
+.results-fullpage-pane {
+  width: 100%;
+  max-width: none;
+}
+
+.results-compact-header {
+  margin-bottom: 0.5rem;
+}
+
+.parsed-chips-inline {
+  margin: 0 auto 0.75rem;
+  max-width: none;
+}
+
 .results-tab.hidden {
   display: none;
 }
@@ -342,18 +360,18 @@ textarea { resize: vertical; min-height: 5rem; }
 
 .results-tab-pane .meal-card-grid,
 .results-tab-pane .selection-bar,
-.results-tab-pane .chef-results-insight,
 .results-tab-pane .parsed-chips,
 .results-tab-pane .recipe-steps,
-.results-tab-pane .link-row,
-.results-tab-pane .step-mode-row {
-  max-width: 1080px;
+.results-tab-pane .selection-detail {
+  width: 100%;
+  max-width: none;
   margin-left: auto;
   margin-right: auto;
 }
 
 .results-tab-pane .tab-header {
-  max-width: 1080px;
+  width: 100%;
+  max-width: none;
   margin-left: auto;
   margin-right: auto;
 }
@@ -1073,6 +1091,186 @@ textarea { resize: vertical; min-height: 5rem; }
   border-radius: 10px;
 }
 
+.selection-bar-fullpage {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  margin-top: 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.selection-detail {
+  margin: 0 0 1rem;
+  padding: 1.25rem 1.35rem 1.5rem;
+  background: #fff;
+  border: 2px solid var(--green);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(27, 67, 50, 0.1);
+}
+
+.selection-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.selection-detail-head h3 {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.35rem;
+}
+
+.selection-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.selection-tab {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.selection-tab.active {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.selection-detail-body {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .selection-detail-body {
+    grid-template-columns: 1.2fr 0.9fr;
+    align-items: start;
+  }
+  .cook-kit-main {
+    grid-row: span 2;
+  }
+}
+
+.cook-kit-subhead {
+  margin: 0 0 0.65rem;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.05rem;
+  color: var(--green);
+}
+
+.cook-kit-elevations {
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.elevation-insight {
+  margin-bottom: 0.65rem;
+}
+
+.elevation-insight:last-child {
+  margin-bottom: 0;
+}
+
+.elevation-insight strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.elevation-insight p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.cook-kit-companions {
+  grid-column: 1 / -1;
+}
+
+.companion-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.companion-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.companion-chip strong {
+  font-size: 0.95rem;
+  color: var(--green);
+}
+
+.companion-chip span {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.companion-chip:hover,
+.companion-chip.active {
+  border-color: var(--green);
+  background: rgba(45, 106, 79, 0.06);
+}
+
+.companion-recipe-expanded {
+  grid-column: 1 / -1;
+  margin-top: 0.25rem;
+  padding: 1rem 1.1rem;
+  background: #f8f6f3;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.companion-recipe-expanded h5 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--green);
+}
+
+.companion-recipe-expanded h5:first-of-type {
+  margin-top: 0;
+}
+
+.companion-why {
+  margin: 0 0 0.5rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.companion-steps {
+  margin-top: 0.35rem;
+}
+
+.cook-kit-loading {
+  padding: 1rem 0;
+}
+
 .meal-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1080,12 +1278,11 @@ textarea { resize: vertical; min-height: 5rem; }
   min-height: 4rem;
 }
 
-#recipes-list.results-scroll {
-  max-height: min(70vh, 42rem);
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 0.35rem;
-  margin: 0.75rem 0 1rem;
+.meal-card-grid-fullpage {
+  gap: 1rem;
+  margin: 0.5rem 0 1.25rem;
+  min-height: calc(100vh - 12rem);
+  align-content: start;
 }
 
 .meal-card {
@@ -1096,6 +1293,65 @@ textarea { resize: vertical; min-height: 5rem; }
   background: #fff;
   cursor: default;
   transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.meal-card-tile {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+.meal-card-tile .meal-card-select-label {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 8px;
+  padding: 0.2rem 0.35rem;
+  margin: 0;
+}
+
+.meal-card-hero {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+  flex: 0 0 160px;
+}
+
+.meal-card-hero-placeholder {
+  background: linear-gradient(135deg, #e8e0d8, #d4cdc4);
+}
+
+.meal-card-tile .meal-card-body {
+  padding: 0.85rem 0.9rem 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.meal-card-tile .result-title {
+  font-size: 1.05rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meal-card-hint {
+  margin-top: auto;
+  font-size: 0.8rem;
+  padding-top: 0.35rem;
+}
+
+.meal-card-meta {
+  margin: 0.15rem 0 0;
 }
 
 .meal-card:hover {
@@ -1399,9 +1655,15 @@ textarea { resize: vertical; min-height: 5rem; }
   .meal-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .companion-chips {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
+  .results-fullpage {
+    padding: 0.5rem 0.75rem 1.5rem;
+  }
   .result-card summary {
     grid-template-columns: 56px 1fr;
   }

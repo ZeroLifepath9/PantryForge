@@ -119,39 +119,28 @@
       <p id="search-status" class="status" role="status"></p>
     </section>
 
-    <section id="results-tab" class="results-tab hidden" aria-label="Recipe results">
-      <div id="results-list-pane" class="results-tab-pane">
-        <div class="tab-header">
+    <section id="results-tab" class="results-tab results-fullpage hidden" aria-label="Recipe results">
+      <div id="results-list-pane" class="results-tab-pane results-fullpage-pane">
+        <div class="tab-header results-compact-header">
           <div>
             <h2 id="results-heading">Recipes</h2>
             <p id="results-message" class="hint tab-subline"></p>
           </div>
           <button type="button" id="close-results-tab" class="tab-close" aria-label="Close results and return to search">×</button>
         </div>
-        <div id="chef-insight" class="chef-results-insight hidden"></div>
-        <div id="parsed-craving" class="parsed-chips hidden"></div>
-        <div id="recipes-list" class="meal-card-grid results-scroll"></div>
-        <div class="selection-bar">
-          <p id="selection-count" class="hint">Click a card for AI steps. Select 2–5 meals to build your inspire dash.</p>
+        <div id="parsed-craving" class="parsed-chips parsed-chips-inline hidden"></div>
+        <div id="recipes-list" class="meal-card-grid meal-card-grid-fullpage"></div>
+        <div id="selection-detail" class="selection-detail hidden" aria-live="polite">
+          <div class="selection-detail-head">
+            <h3 id="selection-detail-title">How to make it</h3>
+            <div id="selection-detail-tabs" class="selection-detail-tabs" role="tablist"></div>
+          </div>
+          <div id="selection-detail-body" class="selection-detail-body"></div>
+        </div>
+        <div class="selection-bar selection-bar-fullpage">
+          <p id="selection-count" class="hint">Hover for ingredients · select a card for cook steps and elevation ideas.</p>
           <button type="button" id="inspired-btn" class="btn-primary hidden">Build my inspire dash</button>
         </div>
-      </div>
-
-      <div id="results-recipe-pane" class="results-tab-pane hidden" aria-label="Recipe instructions">
-        <div class="tab-header">
-          <div>
-            <button type="button" id="back-to-results-list" class="btn-ghost tab-back">← Back to results</button>
-            <h2 id="recipe-title">Recipe</h2>
-            <p id="recipe-meta" class="hint tab-subline"></p>
-          </div>
-          <button type="button" id="close-recipe-tab" class="tab-close" aria-label="Close and return to search">×</button>
-        </div>
-        <div id="recipe-links" class="link-row"></div>
-        <div class="step-mode-row">
-          <button type="button" id="recipe-mode-beginner" class="btn-chip active">Instructor steps + tips</button>
-          <button type="button" id="recipe-mode-direct" class="btn-chip">Keep it direct</button>
-        </div>
-        <ol id="recipe-steps" class="recipe-steps"></ol>
       </div>
     </section>
 

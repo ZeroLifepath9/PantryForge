@@ -23,6 +23,10 @@ let pendingSaveRecipe = null;
 let guestSaveAuthMode = "register";
 let stepMode = "beginner";
 let currentRecipeId = null;
+let cookKits = new Map();
+let activeDetailId = null;
+let expandedCompanionKey = null;
+let cookKitLoading = null;
 let prefsSaveTimer = null;
 let subsDebounce = null;
 let refineDebounce = null;
@@ -165,12 +169,6 @@ async function savePreferences() {
 
 function showResultsListPane() {
   $("results-list-pane")?.classList.remove("hidden");
-  $("results-recipe-pane")?.classList.add("hidden");
-}
-
-function showResultsRecipePane() {
-  $("results-list-pane")?.classList.add("hidden");
-  $("results-recipe-pane")?.classList.remove("hidden");
 }
 
 function closeResultsTab() {
@@ -256,31 +254,29 @@ function renderMealCard(recipe) {
     ? `<span class="meal-card-popular">Popular</span>`
     : "";
   const img = recipe.image
-    ? `<img class="result-thumb" src="${escapeHtml(recipe.image)}" alt="" loading="lazy" />`
-    : `<div class="result-thumb result-thumb-placeholder" aria-hidden="true"></div>`;
+    ? `<img class="meal-card-hero" src="${escapeHtml(recipe.image)}" alt="" loading="lazy" />`
+    : `<div class="meal-card-hero meal-card-hero-placeholder" aria-hidden="true"></div>`;
   const ingredients = recipe.ingredient_names || [];
   const ingList = ingredients.length
-    ? `<ul>${ingredients.slice(0, 14).map((i) => `<li>${escapeHtml(i)}</li>`).join("")}${ingredients.length > 14 ? `<li>+ ${ingredients.length - 14} more</li>` : ""}</ul>`
-    : `<p>Hover unavailable — open for full list.</p>`;
+    ? `<ul>${ingredients.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`
+    : `<p>Ingredient list loading on select.</p>`;
   return `
-    <article class="meal-card ${catClass} ${checked ? "meal-card-selected" : ""}" data-recipe-id="${recipe.id}">
+    <article class="meal-card meal-card-tile ${catClass} ${checked ? "meal-card-selected" : ""}" data-recipe-id="${recipe.id}" tabindex="0" role="button" aria-pressed="${checked}">
       <div class="meal-card-hover-ingredients" aria-hidden="true">
         <strong>Ingredients</strong>
         ${ingList}
       </div>
-      <div class="meal-card-inner">
-        <label class="meal-card-select-label">
-          <input type="checkbox" class="meal-select" data-recipe-id="${recipe.id}" ${checked ? "checked" : ""} />
-          <span class="sr-only">Select for inspire dash</span>
-        </label>
-        ${img}
-        <div class="meal-card-body">
-          <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}${recipe.thread_label ? ` · ${escapeHtml(recipe.thread_label)}` : ""}</span>
-          <strong class="result-title">${escapeHtml(recipe.title)}</strong>
-          ${recipe.fit_note ? `<p class="meal-card-fit meal-card-cite">${escapeHtml(recipe.fit_note)}</p>` : ""}
-          ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
-          <button type="button" class="btn-ghost btn-small meal-card-open-btn view-recipe-btn" data-view-recipe="${recipe.id}">Cook this — AI steps</button>
-        </div>
+      <label class="meal-card-select-label" title="Select for cook steps">
+        <input type="checkbox" class="meal-select" data-recipe-id="${recipe.id}" ${checked ? "checked" : ""} />
+        <span class="sr-only">Select ${escapeHtml(recipe.title)}</span>
+      </label>
+      ${img}
+      <div class="meal-card-body">
+        <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}${recipe.thread_label ? ` · ${escapeHtml(recipe.thread_label)}` : ""}</span>
+        <strong class="result-title">${escapeHtml(recipe.title)}</strong>
+        ${recipe.fit_note ? `<p class="meal-card-fit meal-card-cite">${escapeHtml(recipe.fit_note)}</p>` : ""}
+        ${recipe.ready_in_minutes ? `<p class="hint meal-card-meta">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
+        <p class="meal-card-hint hint">${checked ? "Selected — scroll for steps" : "Hover ingredients · select to cook"}</p>
       </div>
     </article>`;
 }
@@ -290,17 +286,164 @@ function updateSelectionUI() {
   const inspireBtn = $("inspired-btn");
   if (count === 0) {
     $("selection-count").textContent =
-      "Click a card for AI steps. Select 2–5 meals to build your inspire dash.";
+      "Hover for ingredients · select a card for cook steps, elevation tips, and companion recipes.";
   } else if (count === 1) {
     $("selection-count").textContent =
-      "1 selected — pick at least one more to build your inspire dash.";
+      "1 selected — cook steps below. Pick one more to build your inspire dash.";
   } else {
-    $("selection-count").textContent = `${count} of ${MAX_RECIPE_SELECT} selected — lineup refines as you pick.`;
+    $("selection-count").textContent = `${count} of ${MAX_RECIPE_SELECT} selected — switch tabs below for each dish.`;
   }
   if (inspireBtn) {
     const showInspire = count >= 2;
     inspireBtn.classList.toggle("hidden", !showInspire);
     inspireBtn.disabled = !showInspire;
+  }
+}
+
+function recipeTitleById(id) {
+  const recipes = normalizeRecipes(lastCraving || {});
+  return recipes.find((r) => r.id === id)?.title || `Recipe ${id}`;
+}
+
+function renderStepsList(steps) {
+  return (steps || [])
+    .map(
+      (s) =>
+        `<li><strong>Step ${s.step}.</strong> ${escapeHtml(s.text)}${
+          s.tip ? `<span class="step-tip">${escapeHtml(s.tip)}</span>` : ""
+        }</li>`
+    )
+    .join("");
+}
+
+function renderCookKitPanel(kit) {
+  if (!kit) return "<p class='hint'>Loading cook steps…</p>";
+  const insights = (kit.elevation_insights || [])
+    .map(
+      (i) =>
+        `<div class="elevation-insight"><strong>${escapeHtml(i.heading)}</strong><p>${escapeHtml(i.body)}</p></div>`
+    )
+    .join("");
+  const companionList = kit.companions || [];
+  const chipsHtml = companionList
+    .map(
+      (c) =>
+        `<button type="button" class="companion-chip ${expandedCompanionKey === `${kit.recipe_id}:${c.key}` ? "active" : ""}" data-companion-key="${escapeHtml(c.key)}" data-recipe-id="${kit.recipe_id}">
+          <strong>${escapeHtml(c.title)}</strong>
+          <span>${escapeHtml(c.why)}</span>
+        </button>`
+    )
+    .join("");
+  const activeCompanion = companionList.find(
+    (c) => expandedCompanionKey === `${kit.recipe_id}:${c.key}`
+  );
+  const expandedHtml = activeCompanion
+    ? `<div class="companion-recipe-expanded">
+        <h5>${escapeHtml(activeCompanion.title)}</h5>
+        <p class="companion-why">${escapeHtml(activeCompanion.why)}</p>
+        <h5>Ingredients</h5>
+        <ul>${(activeCompanion.ingredients || []).map((ing) => `<li>${escapeHtml(ing)}</li>`).join("")}</ul>
+        <h5>Steps</h5>
+        <ol class="recipe-steps companion-steps">${renderStepsList(activeCompanion.steps)}</ol>
+      </div>`
+    : "";
+
+  return `
+    <div class="cook-kit-main">
+      <h4 class="cook-kit-subhead">How to make it</h4>
+      <ol class="recipe-steps">${renderStepsList(kit.steps)}</ol>
+    </div>
+    ${insights ? `<div class="cook-kit-elevations"><h4 class="cook-kit-subhead">Take it to the next level</h4>${insights}</div>` : ""}
+    ${companionList.length ? `<div class="cook-kit-companions"><h4 class="cook-kit-subhead">Elevate with these</h4><p class="hint">Tap a companion for its full recipe and steps.</p><div class="companion-chips">${chipsHtml}</div>${expandedHtml}</div>` : ""}`;
+}
+
+function renderSelectionDetail() {
+  const panel = $("selection-detail");
+  const body = $("selection-detail-body");
+  const tabs = $("selection-detail-tabs");
+  if (!panel || !body) return;
+
+  if (!selectedIds.size) {
+    panel.classList.add("hidden");
+    body.innerHTML = "";
+    if (tabs) tabs.innerHTML = "";
+    activeDetailId = null;
+    expandedCompanionKey = null;
+    return;
+  }
+
+  if (!activeDetailId || !selectedIds.has(activeDetailId)) {
+    activeDetailId = [...selectedIds][0];
+  }
+
+  panel.classList.remove("hidden");
+  const activeTitle = recipeTitleById(activeDetailId);
+  $("selection-detail-title").textContent = activeTitle;
+
+  if (tabs) {
+    tabs.innerHTML = [...selectedIds]
+      .map((id) => {
+        const title = recipeTitleById(id);
+        const short = title.length > 28 ? `${title.slice(0, 26)}…` : title;
+        return `<button type="button" class="selection-tab ${id === activeDetailId ? "active" : ""}" data-detail-id="${id}" role="tab" aria-selected="${id === activeDetailId}">${escapeHtml(short)}</button>`;
+      })
+      .join("");
+    tabs.querySelectorAll(".selection-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeDetailId = Number(btn.dataset.detailId);
+        expandedCompanionKey = null;
+        renderSelectionDetail();
+        $("selection-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
+  }
+
+  if (cookKitLoading === activeDetailId) {
+    body.innerHTML = "<p class='hint cook-kit-loading'>Chef is writing your steps and elevation ideas…</p>";
+    return;
+  }
+
+  const kit = cookKits.get(activeDetailId);
+  body.innerHTML = renderCookKitPanel(kit);
+
+  body.querySelectorAll(".companion-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const key = `${chip.dataset.recipeId}:${chip.dataset.companionKey}`;
+      expandedCompanionKey = expandedCompanionKey === key ? null : key;
+      renderSelectionDetail();
+    });
+  });
+}
+
+async function loadCookKit(recipeId) {
+  const explain = $("explain-techniques")?.checked !== false;
+  const filters = searchFilterPayload();
+  const data = await api(`/recipes/${recipeId}/cook-kit`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...filters,
+      what_sounds_good: soundsGoodText() || null,
+      dish_anchor: lastCraving?.parsed?.dish_anchor || null,
+      explain_techniques: explain,
+      skill_level: explain && stepMode === "beginner" ? "beginner" : "direct",
+    }),
+  });
+  cookKits.set(recipeId, data);
+  return data;
+}
+
+async function ensureCookKit(recipeId) {
+  if (cookKits.has(recipeId)) return;
+  cookKitLoading = recipeId;
+  renderSelectionDetail();
+  try {
+    await loadCookKit(recipeId);
+  } catch (err) {
+    cookKits.set(recipeId, { recipe_id: recipeId, title: recipeTitleById(recipeId), steps: [], elevation_insights: [], companions: [], error: err.message });
+  } finally {
+    cookKitLoading = null;
+    renderSelectionDetail();
+    $("selection-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -311,33 +454,72 @@ function scheduleLineupRefine() {
   }, 700);
 }
 
+async function toggleRecipeSelect(rid, checked) {
+  if (checked) {
+    if (selectedIds.size >= MAX_RECIPE_SELECT) {
+      setStatus($("search-status"), `Up to ${MAX_RECIPE_SELECT} recipes — chef refines the rest.`, true);
+      return false;
+    }
+    selectedIds.add(rid);
+    activeDetailId = rid;
+    expandedCompanionKey = null;
+    updateSelectionUI();
+    renderSelectionDetail();
+    await ensureCookKit(rid);
+    scheduleLineupRefine();
+    return true;
+  }
+  selectedIds.delete(rid);
+  cookKits.delete(rid);
+  if (activeDetailId === rid) {
+    activeDetailId = [...selectedIds][0] || null;
+    expandedCompanionKey = null;
+  }
+  updateSelectionUI();
+  renderSelectionDetail();
+  scheduleLineupRefine();
+  return true;
+}
+
+function syncCardSelectState(card, checked) {
+  card.classList.toggle("meal-card-selected", checked);
+  card.setAttribute("aria-pressed", String(checked));
+  const cb = card.querySelector(".meal-select");
+  if (cb) cb.checked = checked;
+  const hint = card.querySelector(".meal-card-hint");
+  if (hint) {
+    hint.textContent = checked ? "Selected — scroll for steps" : "Hover ingredients · select to cook";
+  }
+}
+
 function bindMealCards(container) {
-  container.querySelectorAll(".meal-select").forEach((cb) => {
-    const id = Number(cb.dataset.recipeId);
-    cb.checked = selectedIds.has(id);
-    cb.closest(".meal-card")?.classList.toggle("meal-card-selected", cb.checked);
-    cb.addEventListener("change", (e) => {
-      const rid = Number(e.target.dataset.recipeId);
-      if (e.target.checked) {
-        if (selectedIds.size >= MAX_RECIPE_SELECT) {
-          e.target.checked = false;
-          setStatus($("search-status"), `Up to ${MAX_RECIPE_SELECT} recipes — chef refines the rest.`, true);
-          return;
-        }
-        selectedIds.add(rid);
-      } else {
-        selectedIds.delete(rid);
-      }
-      e.target.closest(".meal-card")?.classList.toggle("meal-card-selected", e.target.checked);
-      updateSelectionUI();
-      scheduleLineupRefine();
-    });
-  });
-  container.querySelectorAll(".view-recipe-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
+  container.querySelectorAll(".meal-card").forEach((card) => {
+    const id = Number(card.dataset.recipeId);
+    syncCardSelectState(card, selectedIds.has(id));
+
+    card.querySelector(".meal-select")?.addEventListener("change", async (e) => {
       e.stopPropagation();
-      openRecipe(Number(btn.dataset.viewRecipe));
+      const rid = Number(e.target.dataset.recipeId);
+      const ok = await toggleRecipeSelect(rid, e.target.checked);
+      if (!ok) e.target.checked = false;
+      syncCardSelectState(card, selectedIds.has(rid));
+    });
+
+    card.addEventListener("click", async (e) => {
+      if (e.target.closest(".meal-select") || e.target.closest("label")) return;
+      const rid = Number(card.dataset.recipeId);
+      const next = !selectedIds.has(rid);
+      const ok = await toggleRecipeSelect(rid, next);
+      if (ok) syncCardSelectState(card, selectedIds.has(rid));
+    });
+
+    card.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      const rid = Number(card.dataset.recipeId);
+      const next = !selectedIds.has(rid);
+      const ok = await toggleRecipeSelect(rid, next);
+      if (ok) syncCardSelectState(card, selectedIds.has(rid));
     });
   });
 }
@@ -385,42 +567,14 @@ function renderParsedCraving(parsed) {
   el.innerHTML = chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("");
 }
 
-function renderChefInsight(data) {
-  const block = $("chef-insight");
-  if (!block) return;
-  const threads = data.craving_threads || data.parsed?.craving_threads || [];
-  const bridge = data.shared_bridge || data.parsed?.shared_bridge;
-  if (!data.chef_headline && !data.chef_intro && !threads.length) {
-    block.classList.add("hidden");
-    block.innerHTML = "";
-    return;
-  }
-  block.classList.remove("hidden");
-  const threadHtml = threads
-    .map(
-      (t) => `
-      <div class="chef-thread">
-        <strong>${escapeHtml(t.label)}</strong>
-        ${t.chef_note ? `<p>${escapeHtml(t.chef_note)}</p>` : ""}
-      </div>`
-    )
-    .join("");
-  const bridgeHtml = bridge?.label
-    ? `<div class="chef-bridge">
-        <strong>Chef's bridge: ${escapeHtml(bridge.label)}</strong>
-        ${bridge.chef_note ? `<p>${escapeHtml(bridge.chef_note)}</p>` : ""}
-      </div>`
-    : "";
-  block.innerHTML = `
-    ${data.chef_headline ? `<h3>${escapeHtml(data.chef_headline)}</h3>` : ""}
-    ${data.chef_intro ? `<p class="chef-intro-lead">${escapeHtml(data.chef_intro)}</p>` : ""}
-    ${threadHtml}
-    ${bridgeHtml}`;
-}
-
 function renderCravingResults(data, opts = {}) {
   lastCraving = data;
-  if (!opts.preserveSelection) selectedIds = new Set();
+  if (!opts.preserveSelection) {
+    selectedIds = new Set();
+    cookKits = new Map();
+    activeDetailId = null;
+    expandedCompanionKey = null;
+  }
   openResultsTab();
   $("inspired-panel").classList.add("hidden");
   $("judge-panel").classList.add("hidden");
@@ -434,9 +588,8 @@ function renderCravingResults(data, opts = {}) {
     ? `Chef's main courses (${total})`
     : "Chef's main courses";
   $("results-message").textContent = data.message || (total
-    ? `${total} of ${pageSize} mains — same dish family included. Select up to ${MAX_RECIPE_SELECT} to refine.`
+    ? `${total} mains — hover for ingredients, select for cook steps & elevation recipes.`
     : "No matches yet.");
-  renderChefInsight(data);
   renderParsedCraving(parsed);
 
   const list = $("recipes-list");
@@ -450,6 +603,7 @@ function renderCravingResults(data, opts = {}) {
   list.innerHTML = recipes.map((r) => renderMealCard(r)).join("");
   bindMealCards(list);
   updateSelectionUI();
+  renderSelectionDetail();
   $("results-tab")?.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -861,56 +1015,10 @@ async function flushPendingSave() {
   }
 }
 
-async function openRecipe(id) {
-  currentRecipeId = id;
-  openResultsTab();
-  showResultsRecipePane();
-  $("recipe-title").textContent = "Loading…";
-  $("recipe-steps").innerHTML = "<li class='hint'>Chef is writing your steps…</li>";
-  try {
-    const detail = await api(`/recipes/${id}`);
-    $("recipe-title").textContent = detail.title;
-    $("recipe-meta").textContent = [
-      detail.ready_in_minutes ? `${detail.ready_in_minutes} min` : null,
-      detail.servings ? `${detail.servings} servings` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    $("recipe-links").innerHTML = detail.source_url
-      ? `<a href="${detail.source_url}" target="_blank" rel="noopener">Original recipe</a>`
-      : "";
-    await loadRecipeSteps();
-  } catch (err) {
-    $("recipe-title").textContent = "Could not load recipe";
-    setStatus($("search-status"), err.message, true);
-  }
-}
-
-async function loadRecipeSteps() {
-  if (!currentRecipeId) return;
-  const explain = stepMode === "beginner" && $("explain-techniques").checked;
-  const filters = searchFilterPayload();
-  const data = await api(`/recipes/${currentRecipeId}/simplify`, {
-    method: "POST",
-    body: JSON.stringify({
-      explain_techniques: explain,
-      skill_level: explain ? "beginner" : "direct",
-      what_sounds_good: soundsGoodText() || null,
-      protein_filters: filters.protein_filters,
-      side_filters: filters.side_filters,
-      diets: filters.diets,
-      intolerances: filters.intolerances,
-      health_conditions: filters.health_conditions,
-    }),
-  });
-  $("recipe-steps").innerHTML = data.steps
-    .map(
-      (s) =>
-        `<li><strong>Step ${s.step}.</strong> ${escapeHtml(s.text)}${
-          s.tip ? `<span class="step-tip">${escapeHtml(s.tip)}</span>` : ""
-        }</li>`
-    )
-    .join("");
+async function reloadActiveCookKit() {
+  if (!activeDetailId || !selectedIds.has(activeDetailId)) return;
+  cookKits.delete(activeDetailId);
+  await ensureCookKit(activeDetailId);
 }
 
 async function enterSession(authData, opts = {}) {
@@ -1051,8 +1159,6 @@ $("re-pitch-btn")?.addEventListener("click", async () => {
 $("save-recipe-btn")?.addEventListener("click", saveCurrentRecipe);
 
 $("close-results-tab")?.addEventListener("click", closeResultsTab);
-$("close-recipe-tab")?.addEventListener("click", closeResultsTab);
-$("back-to-results-list")?.addEventListener("click", backToResultsList);
 
 $("back-to-results")?.addEventListener("click", () => {
   $("inspired-panel").classList.add("hidden");
@@ -1109,8 +1215,8 @@ $("sounds-good-input")?.addEventListener("keydown", (e) => {
 function setStepMode(mode) {
   stepMode = mode;
   const beginner = mode === "beginner";
-  ["mode-beginner", "recipe-mode-beginner"].forEach((id) => $(id)?.classList.toggle("active", beginner));
-  ["mode-direct", "recipe-mode-direct"].forEach((id) => $(id)?.classList.toggle("active", !beginner));
+  $("mode-beginner")?.classList.toggle("active", beginner);
+  $("mode-direct")?.classList.toggle("active", !beginner);
 }
 
 $("mode-beginner")?.addEventListener("click", () => {
@@ -1121,15 +1227,6 @@ $("mode-direct")?.addEventListener("click", () => {
   setStepMode("direct");
   if (currentChefProposal) startInspiredCook();
 });
-$("recipe-mode-beginner")?.addEventListener("click", async () => {
-  setStepMode("beginner");
-  await loadRecipeSteps();
-});
-$("recipe-mode-direct")?.addEventListener("click", async () => {
-  setStepMode("direct");
-  await loadRecipeSteps();
-});
-
 document.addEventListener("change", (e) => {
   if (
     e.target.matches(
@@ -1138,6 +1235,7 @@ document.addEventListener("change", (e) => {
   ) {
     schedulePrefsSave();
     updateAllFilterCounts();
+    if (e.target.id === "explain-techniques") reloadActiveCookKit();
   }
   if (e.target.matches("#cuisine-options input, #protein-options input, #side-options input")) {
     updateAllFilterCounts();
