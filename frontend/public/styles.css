@@ -409,11 +409,35 @@ textarea { resize: vertical; min-height: 5rem; }
   color: var(--accent);
 }
 
-.chef-results-insight p {
-  margin: 0;
+.chef-results-insight p,
+.chef-results-insight .chef-intro-lead {
+  margin: 0 0 0.75rem;
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.55;
+}
+
+.chef-thread,
+.chef-bridge {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.chef-thread strong,
+.chef-bridge strong {
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.chef-thread p,
+.chef-bridge p {
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+}
+
+.chef-bridge strong {
+  color: var(--accent);
 }
 
 .protein-prompt {

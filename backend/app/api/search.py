@@ -9,6 +9,7 @@ from app.schemas import (
     CravingParsed,
     CravingSearchRequest,
     CravingSearchResponse,
+    CravingThread,
     DietOption,
     MealRecipeCard,
     MetaResponse,
@@ -17,6 +18,7 @@ from app.schemas import (
     RecipeSearchResult,
     SearchRecipesRequest,
     SearchRecipesResponse,
+    SharedBridge,
 )
 from app.services import mock_data
 from app.services.cooking_ai import parse_ingredients
@@ -49,19 +51,26 @@ async def search_craving_endpoint(body: CravingSearchRequest):
     payload, is_mock = await search_by_craving(
         body.what_sounds_good,
         protein_filter=body.protein_filter,
+        selected_recipe_ids=body.selected_recipe_ids,
         diets=body.diets,
         intolerances=body.intolerances,
         health_conditions=body.health_conditions,
     )
+    parsed_raw = payload["parsed"]
+    bridge = parsed_raw.get("shared_bridge") or payload.get("shared_bridge")
+    threads = payload.get("craving_threads") or parsed_raw.get("craving_threads") or []
     return CravingSearchResponse(
         what_sounds_good=payload["what_sounds_good"],
-        parsed=CravingParsed(**payload["parsed"]),
+        parsed=CravingParsed(**parsed_raw),
         recipes=[MealRecipeCard(**m) for m in payload["recipes"]],
         chef_headline=payload.get("chef_headline"),
         chef_intro=payload.get("chef_intro"),
+        craving_threads=[CravingThread(**t) for t in threads],
+        shared_bridge=SharedBridge(**bridge) if bridge else None,
         page_size=payload.get("page_size", 25),
         popular_top=payload.get("popular_top", 5),
         candidate_count=payload.get("candidate_count", 0),
+        refined=bool(payload.get("refined")),
         mock=is_mock,
         live=bool(payload.get("live")),
         message=payload.get("message"),

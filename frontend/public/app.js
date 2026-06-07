@@ -20,6 +20,8 @@ let stepMode = "beginner";
 let currentRecipeId = null;
 let prefsSaveTimer = null;
 let subsDebounce = null;
+let refineDebounce = null;
+const MAX_RECIPE_SELECT = 5;
 
 const $ = (id) => document.getElementById(id);
 
@@ -185,7 +187,7 @@ function renderMealCard(recipe) {
       <div class="meal-card-inner">
         ${img}
         <div class="meal-card-body">
-          <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}</span>
+          <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}${recipe.thread_label ? ` · ${escapeHtml(recipe.thread_label)}` : ""}</span>
           <strong class="result-title">${escapeHtml(recipe.title)}</strong>
           ${recipe.fit_note ? `<p class="meal-card-fit">${escapeHtml(recipe.fit_note)}</p>` : ""}
           ${recipe.summary ? `<p class="meal-card-summary">${escapeHtml(recipe.summary)}</p>` : ""}
@@ -199,19 +201,38 @@ function renderMealCard(recipe) {
 function updateSelectionUI() {
   const count = selectedIds.size;
   $("selection-count").textContent = count
-    ? `${count} recipe${count === 1 ? "" : "s"} selected`
-    : "Select the recipes you want to make.";
+    ? `${count} of ${MAX_RECIPE_SELECT} selected — lineup refines as you pick`
+    : `Select up to ${MAX_RECIPE_SELECT} — the chef refines pairings around your picks.`;
   $("inspired-btn").disabled = count === 0;
+}
+
+function scheduleLineupRefine() {
+  clearTimeout(refineDebounce);
+  refineDebounce = setTimeout(() => {
+    if (selectedIds.size > 0) runSearch({ refine: true });
+  }, 700);
 }
 
 function bindMealCards(container) {
   container.querySelectorAll(".meal-select").forEach((cb) => {
+    const id = Number(cb.dataset.recipeId);
+    cb.checked = selectedIds.has(id);
+    cb.closest(".meal-card")?.classList.toggle("meal-card-selected", cb.checked);
     cb.addEventListener("change", (e) => {
-      const id = Number(e.target.dataset.recipeId);
-      if (e.target.checked) selectedIds.add(id);
-      else selectedIds.delete(id);
+      const rid = Number(e.target.dataset.recipeId);
+      if (e.target.checked) {
+        if (selectedIds.size >= MAX_RECIPE_SELECT) {
+          e.target.checked = false;
+          setStatus($("search-status"), `Up to ${MAX_RECIPE_SELECT} recipes — chef refines the rest.`, true);
+          return;
+        }
+        selectedIds.add(rid);
+      } else {
+        selectedIds.delete(rid);
+      }
       e.target.closest(".meal-card")?.classList.toggle("meal-card-selected", e.target.checked);
       updateSelectionUI();
+      scheduleLineupRefine();
     });
   });
   container.querySelectorAll(".view-recipe-btn").forEach((btn) => {
@@ -245,25 +266,51 @@ function renderParsedCraving(parsed) {
     return;
   }
   const chips = [];
-  if (parsed.search_mode === "dish" && parsed.dish_anchor) {
-    chips.push(dishFamilyLabel(parsed.dish_anchor));
-    if (parsed.dish_queries?.length) {
-      chips.push(parsed.dish_queries.slice(0, 5).join(" · "));
-    }
-    if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
-  } else if (parsed.protein) {
-    chips.push(`Searching: ${parsed.protein} dishes`);
-  } else if (parsed.main_query) {
-    chips.push(`Searching: ${parsed.main_query}`);
+  for (const th of parsed.craving_threads || []) {
+    if (th.label) chips.push(th.label);
   }
-  if (parsed.mood) chips.push(`Mood: ${parsed.mood}`);
-  if (parsed.starches?.length) chips.push(`Vibe: ${parsed.starches.join(", ")}`);
+  if (parsed.shared_bridge?.label) chips.push(`+ ${parsed.shared_bridge.label}`);
+  if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
+  if (!chips.length && parsed.main_query) chips.push(parsed.main_query);
   if (!chips.length) {
     el.classList.add("hidden");
     return;
   }
   el.classList.remove("hidden");
-  el.innerHTML = chips.map((c) => `<span>${c}</span>`).join("");
+  el.innerHTML = chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("");
+}
+
+function renderChefInsight(data) {
+  const block = $("chef-insight");
+  if (!block) return;
+  const threads = data.craving_threads || data.parsed?.craving_threads || [];
+  const bridge = data.shared_bridge || data.parsed?.shared_bridge;
+  if (!data.chef_headline && !data.chef_intro && !threads.length) {
+    block.classList.add("hidden");
+    block.innerHTML = "";
+    return;
+  }
+  block.classList.remove("hidden");
+  const threadHtml = threads
+    .map(
+      (t) => `
+      <div class="chef-thread">
+        <strong>${escapeHtml(t.label)}</strong>
+        ${t.chef_note ? `<p>${escapeHtml(t.chef_note)}</p>` : ""}
+      </div>`
+    )
+    .join("");
+  const bridgeHtml = bridge?.label
+    ? `<div class="chef-bridge">
+        <strong>Chef's bridge: ${escapeHtml(bridge.label)}</strong>
+        ${bridge.chef_note ? `<p>${escapeHtml(bridge.chef_note)}</p>` : ""}
+      </div>`
+    : "";
+  block.innerHTML = `
+    ${data.chef_headline ? `<h3>${escapeHtml(data.chef_headline)}</h3>` : ""}
+    ${data.chef_intro ? `<p class="chef-intro-lead">${escapeHtml(data.chef_intro)}</p>` : ""}
+    ${threadHtml}
+    ${bridgeHtml}`;
 }
 
 function renderProteinPrompt(parsed) {
@@ -301,9 +348,9 @@ function renderProteinPrompt(parsed) {
   });
 }
 
-function renderCravingResults(data) {
+function renderCravingResults(data, opts = {}) {
   lastCraving = data;
-  selectedIds = new Set();
+  if (!opts.preserveSelection) selectedIds = new Set();
   $("results-panel").classList.remove("hidden");
   $("inspired-panel").classList.add("hidden");
   $("cook-panel").classList.add("hidden");
@@ -313,28 +360,13 @@ function renderCravingResults(data) {
   const parsed = data.parsed || {};
   const pageSize = data.page_size || 25;
   const popularTop = data.popular_top || 5;
-  const dishTitle =
-    parsed.search_mode === "dish" && parsed.dish_anchor
-      ? dishFamilyLabel(parsed.dish_anchor)
-      : "Recipes for you";
   $("results-heading").textContent = total
-    ? `${dishTitle} (${total} of ${pageSize})`
-    : dishTitle;
+    ? `Chef's lineup (${total})`
+    : "Chef's lineup";
   $("results-message").textContent = data.message || (total
-    ? `${total} recipe${total === 1 ? "" : "s"} to inspire your own creation.`
+    ? `${total} mains & pairings — select up to ${MAX_RECIPE_SELECT} to refine.`
     : "No matches yet.");
-  const chefBlock = $("chef-insight");
-  if (chefBlock) {
-    if (data.chef_headline || data.chef_intro) {
-      chefBlock.classList.remove("hidden");
-      chefBlock.innerHTML = `
-        ${data.chef_headline ? `<h3>${escapeHtml(data.chef_headline)}</h3>` : ""}
-        ${data.chef_intro ? `<p>${escapeHtml(data.chef_intro)}</p>` : ""}`;
-    } else {
-      chefBlock.classList.add("hidden");
-      chefBlock.innerHTML = "";
-    }
-  }
+  renderChefInsight(data);
   renderParsedCraving(parsed);
   renderProteinPrompt(parsed);
 
@@ -365,14 +397,19 @@ async function runSearch(opts = {}) {
     setStatus($("search-status"), "Tell me what sounds good first.", true);
     return;
   }
-  if (!("proteinFilter" in opts)) {
-    selectedProteinFilter = null;
-    proteinFilterExplicit = false;
-  } else {
-    selectedProteinFilter = opts.proteinFilter;
-    proteinFilterExplicit = true;
+  if (!opts.refine) {
+    if (!("proteinFilter" in opts)) {
+      selectedProteinFilter = null;
+      proteinFilterExplicit = false;
+    } else {
+      selectedProteinFilter = opts.proteinFilter;
+      proteinFilterExplicit = true;
+    }
   }
-  setStatus($("search-status"), "Understanding your craving…");
+  setStatus(
+    $("search-status"),
+    opts.refine ? "Chef is refining your lineup…" : "Chef is reading your craving…"
+  );
   $("search-btn").disabled = true;
   try {
     await savePreferences();
@@ -383,14 +420,21 @@ async function runSearch(opts = {}) {
       health_conditions: selectedHealthConditions(),
     };
     if (proteinFilterExplicit) body.protein_filter = selectedProteinFilter || null;
+    if (opts.refine && selectedIds.size) {
+      body.selected_recipe_ids = [...selectedIds];
+    }
     const data = await api("/search/craving", {
       method: "POST",
       body: JSON.stringify(body),
     });
-    renderCravingResults(data);
+    renderCravingResults(data, { preserveSelection: Boolean(opts.refine) });
     setStatus(
       $("search-status"),
-      data.live ? "Live recipes from Spoonacular." : data.message || "Results ready."
+      data.refined
+        ? "Lineup refined around your picks."
+        : data.live
+          ? "Chef lineup from Grok + Spoonacular."
+          : data.message || "Results ready."
     );
   } catch (err) {
     setStatus($("search-status"), err.message, true);

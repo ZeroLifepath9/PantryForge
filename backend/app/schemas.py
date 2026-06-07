@@ -189,8 +189,22 @@ class AdvisorInsightsResponse(BaseModel):
     prompt_version: str | None = None
 
 
+class CravingThread(BaseModel):
+    label: str = ""
+    search_terms: list[str] = []
+    chef_note: str | None = None
+
+
+class SharedBridge(BaseModel):
+    label: str = ""
+    search_terms: list[str] = []
+    chef_note: str | None = None
+
+
 class CravingParsed(BaseModel):
-    search_mode: str = "general"
+    search_mode: str = "chef"
+    craving_threads: list[CravingThread] = []
+    shared_bridge: SharedBridge | None = None
     dish_anchor: str | None = None
     dish_queries: list[str] = []
     protein: str | None = None
@@ -214,6 +228,7 @@ class MealRecipeCard(BaseModel):
     image: str | None = None
     summary: str | None = None
     fit_note: str | None = None
+    thread_label: str | None = None
     is_popular: bool = False
     ready_in_minutes: int | None = None
     servings: int | None = None
@@ -224,6 +239,7 @@ class MealRecipeCard(BaseModel):
 class CravingSearchRequest(BaseModel):
     what_sounds_good: str = Field(min_length=1, max_length=500)
     protein_filter: str | None = Field(default=None, max_length=80)
+    selected_recipe_ids: list[int] = Field(default_factory=list, max_length=5)
     diets: list[str] = []
     intolerances: list[str] = []
     health_conditions: list[str] = []
@@ -235,9 +251,12 @@ class CravingSearchResponse(BaseModel):
     recipes: list[MealRecipeCard] = []
     chef_headline: str | None = None
     chef_intro: str | None = None
+    craving_threads: list[CravingThread] = []
+    shared_bridge: SharedBridge | None = None
     page_size: int = 25
     popular_top: int = 5
     candidate_count: int = 0
+    refined: bool = False
     mock: bool = False
     live: bool = False
     message: str | None = None
