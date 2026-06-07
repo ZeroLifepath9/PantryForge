@@ -52,3 +52,14 @@ async def get_optional_user(
     if not user:
         return None
     return user
+
+
+async def get_current_member_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.password_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Create an account to save recipes to your personal file.",
+        )
+    return current_user

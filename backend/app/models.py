@@ -50,3 +50,31 @@ class UserPreferences(Base):
     def pantry_staples(self) -> list[str]:
         raw = json.loads(self.pantry_staples_json or "[]")
         return raw if raw else []
+
+
+class SavedRecipe(Base):
+    __tablename__ = "saved_recipes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    what_sounds_good: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recipe_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    steps_json: Mapped[str] = mapped_column(Text, default="[]")
+    substitutions_json: Mapped[str] = mapped_column(Text, default="[]")
+    proposal_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    def recipe_ids(self) -> list[int]:
+        return json.loads(self.recipe_ids_json or "[]")
+
+    def steps(self) -> list[dict]:
+        return json.loads(self.steps_json or "[]")
+
+    def substitutions(self) -> list[dict]:
+        return json.loads(self.substitutions_json or "[]")
+
+    def proposal(self) -> dict | None:
+        if not self.proposal_json:
+            return None
+        return json.loads(self.proposal_json)

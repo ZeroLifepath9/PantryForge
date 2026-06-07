@@ -2,10 +2,13 @@ from fastapi import APIRouter, HTTPException
 
 from app.schemas import (
     ApprovedSubstitution,
+    ChefProposal,
     CreationInsight,
     InspiredCookRequest,
     InspiredCookResponse,
     InspiredIngredientItem,
+    InspiredProposalRequest,
+    InspiredProposalResponse,
     InspiredSetupRequest,
     InspiredSetupResponse,
     InspiredSubstitutionsRequest,
@@ -14,6 +17,7 @@ from app.schemas import (
     SimplifiedStep,
     SubstitutionItem,
 )
+from app.services.chef_proposal import generate_chef_proposal
 from app.services.inspired_cook import (
     generate_inspired_steps,
     inspired_setup,
@@ -60,24 +64,46 @@ async def inspired_substitutions_endpoint(body: InspiredSubstitutionsRequest):
     )
 
 
+@router.post("/inspired/proposal", response_model=InspiredProposalResponse)
+async def inspired_proposal_endpoint(body: InspiredProposalRequest):
+    try:
+        approved = [s.model_dump() for s in body.approved_substitutions]
+        result, is_mock = await generate_chef_proposal(
+            body.recipe_ids,
+            body.available_keys,
+            approved_substitutions=approved,
+            what_sounds_good=body.what_sounds_good,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return InspiredProposalResponse(
+        proposal=ChefProposal(**result),
+        mock=is_mock,
+    )
+
+
 @router.post("/inspired/steps", response_model=InspiredCookResponse)
 async def inspired_steps_endpoint(body: InspiredCookRequest):
     try:
         approved = [s.model_dump() for s in body.approved_substitutions]
+        proposal = body.chef_proposal.model_dump() if body.chef_proposal else None
         result, is_mock = await generate_inspired_steps(
             body.recipe_ids,
             body.available_keys,
             approved_substitutions=approved,
             explain_techniques=body.explain_techniques,
             what_sounds_good=body.what_sounds_good,
+            chef_proposal=proposal,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    proposal_raw = result.get("chef_proposal")
     return InspiredCookResponse(
         meal_title=result["meal_title"],
         steps=[SimplifiedStep(**s) for s in result["steps"]],
         substitutions_applied=[
             ApprovedSubstitution(**s) for s in result.get("substitutions_applied") or []
         ],
+        chef_proposal=ChefProposal(**proposal_raw) if proposal_raw else body.chef_proposal,
         mock=is_mock,
     )

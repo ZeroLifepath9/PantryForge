@@ -10,25 +10,25 @@ from app.config import settings
 from app.services.recipe_search import get_recipe_detail
 from app.services.xai_client import chat_completion
 
-INSIGHT_SYSTEM = """You help home cooks scratch a food craving by INSPIRING their own creation —
-not copying recipes verbatim. They selected dishes that feature a protein or craving.
+INSIGHT_SYSTEM = """You are briefing a competition chef before they pitch the judge.
+The judge selected inspiration dishes — the chef will NOT copy them, but steal ideas to scratch one urge at home.
 
 Output ONLY valid JSON:
 {
-  "headline": "short encouraging title",
-  "urge_summary": "1-2 sentences on what urge/craving this satisfies",
-  "fusion_idea": "one paragraph: how to combine ideas from their picks into one new plate",
+  "headline": "short title for the inspire dash",
+  "urge_summary": "1-2 sentences on the craving these picks unlock",
+  "fusion_idea": "one paragraph: how a contestant would fuse these ideas into one original plate",
   "mix_elements": [
     {
       "from_recipe": "recipe title from selection",
       "borrow": "technique, flavor, or component to steal",
-      "use_it": "how to use it in a scratch version"
+      "use_it": "how the chef uses it in a scratch version"
     }
   ],
-  "scratch_meal": "2-3 sentences describing the inspired meal they could make by mixing it together"
+  "scratch_meal": "2-3 sentences previewing the dish the chef will pitch once pantry is known"
 }
 
-Be practical. Reference the protein when given. Encourage improvisation with what they have."""
+Be practical. Reference the protein when given. Competition energy, still warm and home-kitchen realistic."""
 
 
 def _extract_json(text: str) -> dict[str, Any]:

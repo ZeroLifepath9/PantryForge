@@ -324,16 +324,72 @@ class ApprovedSubstitution(BaseModel):
     substitute: str
 
 
+class ChefProposal(BaseModel):
+    dish_name: str
+    pitch: str
+    technique_highlight: str
+    plate_description: str
+    pantry_note: str = ""
+
+
 class InspiredCookRequest(BaseModel):
     recipe_ids: list[int] = Field(min_length=1)
     available_keys: list[str] = []
     approved_substitutions: list[ApprovedSubstitution] = []
     explain_techniques: bool = True
     what_sounds_good: str | None = Field(default=None, max_length=500)
+    chef_proposal: ChefProposal | None = None
 
 
 class InspiredCookResponse(BaseModel):
     meal_title: str
     steps: list[SimplifiedStep]
     substitutions_applied: list[ApprovedSubstitution] = []
+    chef_proposal: ChefProposal | None = None
     mock: bool = False
+
+
+class InspiredProposalRequest(BaseModel):
+    recipe_ids: list[int] = Field(min_length=1)
+    available_keys: list[str] = []
+    approved_substitutions: list[ApprovedSubstitution] = []
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+
+
+class InspiredProposalResponse(BaseModel):
+    proposal: ChefProposal
+    mock: bool = False
+
+
+class SaveRecipeRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    what_sounds_good: str | None = Field(default=None, max_length=500)
+    recipe_ids: list[int] = Field(default_factory=list)
+    steps: list[SimplifiedStep] = Field(min_length=1)
+    substitutions_applied: list[ApprovedSubstitution] = []
+    chef_proposal: ChefProposal | None = None
+
+
+class SavedRecipeSummary(BaseModel):
+    id: str
+    title: str
+    what_sounds_good: str | None = None
+    recipe_count: int = 0
+    step_count: int = 0
+    created_at: str
+
+
+class SavedRecipeDetail(BaseModel):
+    id: str
+    title: str
+    what_sounds_good: str | None = None
+    recipe_ids: list[int] = []
+    steps: list[SimplifiedStep] = []
+    substitutions_applied: list[ApprovedSubstitution] = []
+    chef_proposal: ChefProposal | None = None
+    created_at: str
+
+
+class SaveRecipeResponse(BaseModel):
+    id: str
+    message: str = "Recipe saved to your personal file."

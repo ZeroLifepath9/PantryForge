@@ -950,6 +950,128 @@ textarea { resize: vertical; min-height: 5rem; }
   accent-color: var(--accent);
 }
 
+.inspire-dash-meals {
+  margin: 0.75rem 0 1rem;
+}
+
+.inspire-dash-label {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.inspire-dash-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.inspire-dash-chip {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: var(--green-soft);
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.inspire-subhead {
+  margin: 1.25rem 0 0.5rem;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.1rem;
+}
+
+.judge-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chef-proposal {
+  margin: 1rem 0 1.25rem;
+  padding: 1.1rem 1.2rem;
+  border: 2px solid var(--green);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbf9 0%, #fff 100%);
+}
+
+.chef-proposal h3 {
+  margin: 0 0 0.65rem;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.35rem;
+}
+
+.proposal-pitch {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin: 0 0 1rem;
+}
+
+.proposal-details {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.proposal-details dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.proposal-details dd {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.judge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.cook-save-row {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(20, 24, 22, 0.55);
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: min(420px, 100%);
+  padding: 1.25rem 1.35rem;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.modal-card h2 {
+  margin: 0 0 0.5rem;
+  font-family: Fraunces, Georgia, serif;
+}
+
 @media (max-width: 640px) {
   .result-card summary {
     grid-template-columns: 56px 1fr;

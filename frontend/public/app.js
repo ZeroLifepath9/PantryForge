@@ -16,6 +16,10 @@ let selectedIds = new Set();
 let inspiredSetup = null;
 let pendingSubstitutions = [];
 let approvedSubs = [];
+let currentChefProposal = null;
+let currentCookData = null;
+let pendingSaveRecipe = null;
+let guestSaveAuthMode = "register";
 let stepMode = "beginner";
 let currentRecipeId = null;
 let prefsSaveTimer = null;
@@ -125,9 +129,15 @@ async function savePreferences() {
 }
 
 function hideAllPanels() {
-  ["landing-panel", "search-panel", "results-panel", "inspired-panel", "cook-panel", "recipe-panel"].forEach(
-    (id) => $(id)?.classList.add("hidden")
-  );
+  [
+    "landing-panel",
+    "search-panel",
+    "results-panel",
+    "inspired-panel",
+    "judge-panel",
+    "cook-panel",
+    "recipe-panel",
+  ].forEach((id) => $(id)?.classList.add("hidden"));
 }
 
 function showLanding() {
@@ -138,11 +148,8 @@ function showLanding() {
   $("sign-out").classList.add("hidden");
 }
 
-function showApp(displayName = "", guest = false) {
-  hideAllPanels();
-  $("search-panel").classList.remove("hidden");
+function updateSessionChrome(displayName = "", guest = false) {
   $("sign-out").classList.remove("hidden");
-  isGuest = guest;
   if (guest) {
     $("session-badge").textContent = "Guest";
     $("session-badge").classList.remove("hidden");
@@ -152,6 +159,13 @@ function showApp(displayName = "", guest = false) {
     $("auth-user").textContent = displayName;
     $("auth-user").classList.remove("hidden");
   }
+}
+
+function showApp(displayName = "", guest = false) {
+  isGuest = guest;
+  hideAllPanels();
+  $("search-panel").classList.remove("hidden");
+  updateSessionChrome(displayName, guest);
 }
 
 function categoryLabel(cat) {
@@ -353,6 +367,7 @@ function renderCravingResults(data, opts = {}) {
   if (!opts.preserveSelection) selectedIds = new Set();
   $("results-panel").classList.remove("hidden");
   $("inspired-panel").classList.add("hidden");
+  $("judge-panel").classList.add("hidden");
   $("cook-panel").classList.add("hidden");
 
   const recipes = normalizeRecipes(data);
@@ -454,7 +469,7 @@ function renderCreationInsight(insight) {
     .map(
       (m) => `
       <div class="creation-mix-item">
-        <strong>${escapeHtml(m.from_recipe)}</strong> — borrow ${escapeHtml(m.borrow)}.
+        <strong>${escapeHtml(m.from_recipe)}</strong> — steal ${escapeHtml(m.borrow)}.
         ${escapeHtml(m.use_it)}
       </div>`
     )
@@ -464,19 +479,54 @@ function renderCreationInsight(insight) {
     <p>${escapeHtml(insight.urge_summary)}</p>
     <p>${escapeHtml(insight.fusion_idea)}</p>
     ${mix ? `<div class="creation-mix-list">${mix}</div>` : ""}
-    <p><strong>Scratch meal:</strong> ${escapeHtml(insight.scratch_meal)}</p>`;
+    <p><strong>Chef preview:</strong> ${escapeHtml(insight.scratch_meal)}</p>`;
+}
+
+function renderInspireDash(titles) {
+  const el = $("inspire-dash-meals");
+  if (!el) return;
+  if (!titles?.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = `
+    <p class="inspire-dash-label">Inspired by</p>
+    <div class="inspire-dash-chips">${titles
+      .map((t) => `<span class="inspire-dash-chip">${escapeHtml(t)}</span>`)
+      .join("")}</div>`;
+}
+
+function renderChefProposal(proposal) {
+  const block = $("chef-proposal");
+  if (!proposal || !block) {
+    block?.classList.add("hidden");
+    return;
+  }
+  block.classList.remove("hidden");
+  block.innerHTML = `
+    <h3>${escapeHtml(proposal.dish_name)}</h3>
+    <p class="proposal-pitch">${escapeHtml(proposal.pitch)}</p>
+    <dl class="proposal-details">
+      <div><dt>Signature technique</dt><dd>${escapeHtml(proposal.technique_highlight)}</dd></div>
+      <div><dt>On the plate</dt><dd>${escapeHtml(proposal.plate_description)}</dd></div>
+      <div><dt>Your pantry</dt><dd>${escapeHtml(proposal.pantry_note || "")}</dd></div>
+    </dl>`;
 }
 
 async function openInspiredPanel() {
   if (!selectedIds.size) return;
-  setStatus($("inspired-status"), "Building your inspired mix…");
+  setStatus($("inspired-status"), "Building your inspire dash…");
   $("results-panel").classList.add("hidden");
+  $("judge-panel").classList.add("hidden");
+  $("cook-panel").classList.add("hidden");
   $("inspired-panel").classList.remove("hidden");
   $("substitutions-block").classList.add("hidden");
-  $("start-cook-btn").disabled = true;
+  $("present-judge-btn").disabled = true;
   approvedSubs = [];
   pendingSubstitutions = [];
+  currentChefProposal = null;
   renderCreationInsight(null);
+  renderInspireDash([]);
 
   try {
     const data = await api("/cook/inspired/setup", {
@@ -488,7 +538,8 @@ async function openInspiredPanel() {
       }),
     });
     inspiredSetup = data;
-    $("inspired-title").textContent = "Ingredients for your mix";
+    $("inspired-title").textContent = "Your inspire dash";
+    renderInspireDash(data.recipe_titles || []);
     renderCreationInsight(data.creation_insight);
     const list = $("pantry-checklist");
     list.innerHTML = (data.ingredients || [])
@@ -504,7 +555,7 @@ async function openInspiredPanel() {
         </label>`
       )
       .join("");
-    $("start-cook-btn").disabled = true;
+    $("present-judge-btn").disabled = true;
     scheduleSubstitutionFetch();
     setStatus($("inspired-status"), "");
   } catch (err) {
@@ -560,21 +611,23 @@ function updateApprovedSubs() {
 }
 
 function refreshCookButton() {
+  const btn = $("present-judge-btn");
+  if (!btn) return;
   const total = inspiredSetup?.ingredients?.length || 0;
   const have = availableKeys().length;
   if (!total) {
-    $("start-cook-btn").disabled = true;
+    btn.disabled = true;
     return;
   }
   if (have === total) {
-    $("start-cook-btn").disabled = false;
+    btn.disabled = false;
     return;
   }
   if (!pendingSubstitutions.length) {
-    $("start-cook-btn").disabled = true;
+    btn.disabled = true;
     return;
   }
-  $("start-cook-btn").disabled = document.querySelectorAll(".sub-approve:checked").length === 0;
+  btn.disabled = document.querySelectorAll(".sub-approve:checked").length === 0;
 }
 
 function scheduleSubstitutionFetch() {
@@ -591,7 +644,7 @@ async function suggestSubstitutions() {
     approvedSubs = [];
     $("substitutions-block").classList.add("hidden");
     refreshCookButton();
-    setStatus($("inspired-status"), "You have everything — ready to cook.");
+    setStatus($("inspired-status"), "Pantry set — ready for the chef's pitch.");
     return;
   }
   setStatus($("inspired-status"), "Finding alternatives…");
@@ -617,10 +670,38 @@ async function suggestSubstitutions() {
   }
 }
 
-async function startInspiredCook() {
+async function presentToJudge() {
   if (!selectedIds.size) return;
-  setStatus($("inspired-status"), "Building your cooking plan…");
-  $("start-cook-btn").disabled = true;
+  setStatus($("inspired-status"), "Chef is plating the pitch…");
+  $("present-judge-btn").disabled = true;
+  try {
+    const data = await api("/cook/inspired/proposal", {
+      method: "POST",
+      body: JSON.stringify({
+        recipe_ids: [...selectedIds],
+        available_keys: availableKeys(),
+        approved_substitutions: approvedSubs,
+        what_sounds_good: soundsGoodText() || null,
+      }),
+    });
+    currentChefProposal = data.proposal;
+    $("inspired-panel").classList.add("hidden");
+    $("judge-panel").classList.remove("hidden");
+    renderChefProposal(data.proposal);
+    $("approve-cook-btn").disabled = false;
+    setStatus($("judge-status"), data.mock ? "Demo pitch — approve to get steps." : "");
+    setStatus($("inspired-status"), "");
+    refreshCookButton();
+  } catch (err) {
+    setStatus($("inspired-status"), err.message, true);
+    refreshCookButton();
+  }
+}
+
+async function startInspiredCook() {
+  if (!selectedIds.size || !currentChefProposal) return;
+  setStatus($("judge-status"), "Chef is writing your instructor steps…");
+  $("approve-cook-btn").disabled = true;
   try {
     const explain = $("explain-techniques").checked && stepMode === "beginner";
     const data = await api("/cook/inspired/steps", {
@@ -631,34 +712,103 @@ async function startInspiredCook() {
         approved_substitutions: approvedSubs,
         explain_techniques: explain,
         what_sounds_good: soundsGoodText() || null,
+        chef_proposal: currentChefProposal,
       }),
     });
     renderCookPanel(data);
-    setStatus($("inspired-status"), "");
+    setStatus($("judge-status"), "");
   } catch (err) {
-    setStatus($("inspired-status"), err.message, true);
-    $("start-cook-btn").disabled = false;
+    setStatus($("judge-status"), err.message, true);
+    $("approve-cook-btn").disabled = false;
   }
 }
 
 function renderCookPanel(data) {
+  currentCookData = data;
   $("inspired-panel").classList.add("hidden");
+  $("judge-panel").classList.add("hidden");
   $("cook-panel").classList.remove("hidden");
   $("cook-title").textContent = data.meal_title;
   const subNote = data.substitutions_applied?.length
     ? `${data.substitutions_applied.length} substitution(s) applied`
     : null;
-  $("cook-meta").textContent = [subNote, data.mock ? "guidance mode" : "AI-adjusted steps"]
+  $("cook-meta").textContent = [
+    subNote,
+    data.mock ? "demo instructor steps" : "Executive chef instructions",
+  ]
     .filter(Boolean)
     .join(" · ");
   $("cook-steps").innerHTML = (data.steps || [])
     .map(
       (s) =>
-        `<li><strong>Step ${s.step}.</strong> ${s.text}${
-          s.tip ? `<span class="step-tip">${s.tip}</span>` : ""
+        `<li><strong>Step ${s.step}.</strong> ${escapeHtml(s.text)}${
+          s.tip ? `<span class="step-tip">${escapeHtml(s.tip)}</span>` : ""
         }</li>`
     )
     .join("");
+  setStatus($("save-recipe-status"), "");
+}
+
+function buildSavePayload() {
+  if (!currentCookData) return null;
+  return {
+    title: currentCookData.meal_title,
+    what_sounds_good: soundsGoodText() || null,
+    recipe_ids: [...selectedIds],
+    steps: currentCookData.steps || [],
+    substitutions_applied: currentCookData.substitutions_applied || [],
+    chef_proposal: currentCookData.chef_proposal || currentChefProposal,
+  };
+}
+
+async function saveCurrentRecipe() {
+  const payload = buildSavePayload();
+  if (!payload) return;
+  if (isGuest) {
+    pendingSaveRecipe = payload;
+    showGuestSaveModal();
+    return;
+  }
+  setStatus($("save-recipe-status"), "Saving…");
+  try {
+    const res = await api("/saved-recipes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setStatus($("save-recipe-status"), res.message || "Saved to your recipe file.");
+  } catch (err) {
+    setStatus($("save-recipe-status"), err.message, true);
+  }
+}
+
+function showGuestSaveModal() {
+  $("guest-save-modal")?.classList.remove("hidden");
+  setStatus($("guest-save-status"), "");
+  guestSaveAuthMode = "register";
+  document.querySelectorAll("[data-guest-auth-mode]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.guestAuthMode === "register");
+  });
+  $("guest-save-submit").textContent = "Create account & save";
+}
+
+function hideGuestSaveModal() {
+  $("guest-save-modal")?.classList.add("hidden");
+  setStatus($("guest-save-status"), "");
+}
+
+async function flushPendingSave() {
+  if (!pendingSaveRecipe || isGuest) return;
+  try {
+    const res = await api("/saved-recipes", {
+      method: "POST",
+      body: JSON.stringify(pendingSaveRecipe),
+    });
+    pendingSaveRecipe = null;
+    setStatus($("save-recipe-status"), res.message || "Saved to your recipe file.");
+    hideGuestSaveModal();
+  } catch (err) {
+    setStatus($("guest-save-status"), err.message, true);
+  }
 }
 
 async function openRecipe(id) {
@@ -706,15 +856,22 @@ async function loadRecipeSteps() {
     .join("");
 }
 
-async function enterSession(authData) {
+async function enterSession(authData, opts = {}) {
   token = authData.access_token;
   localStorage.setItem("pf_token", token);
   isGuest = authData.is_guest;
-  showApp(authData.email, authData.is_guest);
+  if (opts.keepView) {
+    updateSessionChrome(authData.email, authData.is_guest);
+  } else {
+    showApp(authData.email, authData.is_guest);
+  }
   try {
     applyPreferences(await api("/preferences/me"));
   } catch {
     /* defaults */
+  }
+  if (pendingSaveRecipe && !isGuest) {
+    await flushPendingSave();
   }
 }
 
@@ -803,16 +960,75 @@ $("sign-out")?.addEventListener("click", () => {
 
 $("search-btn")?.addEventListener("click", runSearch);
 $("inspired-btn")?.addEventListener("click", openInspiredPanel);
-$("start-cook-btn")?.addEventListener("click", startInspiredCook);
+$("present-judge-btn")?.addEventListener("click", presentToJudge);
+$("approve-cook-btn")?.addEventListener("click", startInspiredCook);
+$("re-pitch-btn")?.addEventListener("click", async () => {
+  setStatus($("judge-status"), "Chef is reworking the pitch…");
+  $("approve-cook-btn").disabled = true;
+  try {
+    const data = await api("/cook/inspired/proposal", {
+      method: "POST",
+      body: JSON.stringify({
+        recipe_ids: [...selectedIds],
+        available_keys: availableKeys(),
+        approved_substitutions: approvedSubs,
+        what_sounds_good: soundsGoodText() || null,
+      }),
+    });
+    currentChefProposal = data.proposal;
+    renderChefProposal(data.proposal);
+    $("approve-cook-btn").disabled = false;
+    setStatus($("judge-status"), "New pitch ready — you're the judge.");
+  } catch (err) {
+    setStatus($("judge-status"), err.message, true);
+    $("approve-cook-btn").disabled = false;
+  }
+});
+$("save-recipe-btn")?.addEventListener("click", saveCurrentRecipe);
 
 $("back-to-results")?.addEventListener("click", () => {
   $("inspired-panel").classList.add("hidden");
   $("results-panel").classList.remove("hidden");
 });
 
-$("back-to-inspired")?.addEventListener("click", () => {
-  $("cook-panel").classList.add("hidden");
+$("back-to-inspired-from-judge")?.addEventListener("click", () => {
+  $("judge-panel").classList.add("hidden");
   $("inspired-panel").classList.remove("hidden");
+});
+
+$("back-to-judge")?.addEventListener("click", () => {
+  $("cook-panel").classList.add("hidden");
+  $("judge-panel").classList.remove("hidden");
+});
+
+$("guest-save-dismiss")?.addEventListener("click", hideGuestSaveModal);
+
+document.querySelectorAll("[data-guest-auth-mode]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    guestSaveAuthMode = btn.dataset.guestAuthMode || "register";
+    document.querySelectorAll("[data-guest-auth-mode]").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    $("guest-save-submit").textContent =
+      guestSaveAuthMode === "register" ? "Create account & save" : "Sign in & save";
+  });
+});
+
+$("guest-save-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  setStatus($("guest-save-status"), "…");
+  try {
+    await enterSession(
+      await api(`/auth/${guestSaveAuthMode}`, {
+        method: "POST",
+        body: JSON.stringify({ email: fd.get("email"), password: fd.get("password") }),
+      }),
+      { keepView: true }
+    );
+    setStatus($("guest-save-status"), "");
+  } catch (err) {
+    setStatus($("guest-save-status"), err.message, true);
+  }
 });
 
 $("back-from-recipe")?.addEventListener("click", () => {
@@ -830,11 +1046,11 @@ function setStepMode(mode) {
 
 $("mode-beginner")?.addEventListener("click", () => {
   setStepMode("beginner");
-  startInspiredCook();
+  if (currentChefProposal) startInspiredCook();
 });
 $("mode-direct")?.addEventListener("click", () => {
   setStepMode("direct");
-  startInspiredCook();
+  if (currentChefProposal) startInspiredCook();
 });
 $("recipe-mode-beginner")?.addEventListener("click", async () => {
   setStepMode("beginner");

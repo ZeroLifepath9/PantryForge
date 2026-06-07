@@ -24,17 +24,23 @@ Output ONLY valid JSON array:
 ]
 Only suggest for ingredients NOT in available_keys. Max one substitute per missing item."""
 
-COOK_SYSTEM = """You write clear home-cooking steps for a meal inspired by selected recipes.
-The cook may have substitutions — honor approved_substitutions exactly.
+COOK_SYSTEM = """You are an executive chef teaching a home cook after the judge approved your competition dish.
+Write exquisite, instructor-level steps for ONE original plate — inspired by reference dishes, not copied.
+Honor approved_substitutions exactly. Use only available_ingredients plus approved substitutes.
+If chef_proposal is provided, cook THAT dish (use its dish_name as meal_title).
+
+Each step: one clear action, precise heat/timing/cues, professional but warm tone.
+Tips explain technique (why, what to watch for) — like a culinary school demo.
+
 Output ONLY valid JSON:
 {
-  "meal_title": "short name for the combined meal",
+  "meal_title": "approved dish name",
   "steps": [
-    {"step": 1, "text": "instruction", "tip": "optional beginner tip or null"}
+    {"step": 1, "text": "instruction", "tip": "optional instructor tip or null"}
   ]
 }
-Order steps logically across mains and sides (prep → cook main → cook sides → serve).
-If explain_techniques is false, keep tips null and be direct."""
+Order: mise en place → cook → sauce/finish → plate → serve.
+If explain_techniques is false, keep tips null and be crisp but still precise."""
 
 
 def _extract_json(text: str) -> Any:
@@ -255,6 +261,7 @@ async def generate_inspired_steps(
     approved_substitutions: list[dict[str, str]] | None = None,
     explain_techniques: bool = True,
     what_sounds_good: str | None = None,
+    chef_proposal: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     recipes = await load_recipes(recipe_ids)
     if not recipes:
@@ -269,7 +276,10 @@ async def generate_inspired_steps(
             substitutions=approved,
             explain_techniques=explain_techniques,
         )
+        if chef_proposal and chef_proposal.get("dish_name"):
+            result["meal_title"] = str(chef_proposal["dish_name"])
         result["substitutions_applied"] = approved
+        result["chef_proposal"] = chef_proposal
         return result, True
 
     recipe_payload = [
@@ -290,6 +300,7 @@ async def generate_inspired_steps(
         "approved_substitutions": approved,
         "explain_techniques": explain_techniques,
         "what_sounds_good": what_sounds_good,
+        "chef_proposal": chef_proposal,
     }
 
     try:
@@ -308,10 +319,14 @@ async def generate_inspired_steps(
             for i, s in enumerate(parsed.get("steps") or [])
             if s.get("text")
         ]
+        meal_title = str(parsed.get("meal_title") or setup["meal_title"])
+        if chef_proposal and chef_proposal.get("dish_name"):
+            meal_title = str(chef_proposal["dish_name"])
         return {
-            "meal_title": str(parsed.get("meal_title") or setup["meal_title"]),
+            "meal_title": meal_title,
             "steps": steps,
             "substitutions_applied": approved,
+            "chef_proposal": chef_proposal,
         }, False
     except Exception:
         result = _mock_inspired_steps(
@@ -319,5 +334,8 @@ async def generate_inspired_steps(
             substitutions=approved,
             explain_techniques=explain_techniques,
         )
+        if chef_proposal and chef_proposal.get("dish_name"):
+            result["meal_title"] = str(chef_proposal["dish_name"])
         result["substitutions_applied"] = approved
+        result["chef_proposal"] = chef_proposal
         return result, True

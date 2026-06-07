@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=20250606-grok-chef" />
+  <link rel="stylesheet" href="/static/styles.css?v=20250606-judge-save" />
 </head>
 <body>
   <header class="site-header">
@@ -15,7 +15,7 @@
       <div>
         <p class="eyebrow">What sounds good?</p>
         <h1>AlchemyPantry</h1>
-        <p class="tagline">Tell me the craving — I'll find recipes that fit and teach you how.</p>
+        <p class="tagline">Scratch the urge to discover what sounds good — then cook it at home with what you have.</p>
       </div>
       <div class="header-actions">
         <span id="mock-badge" class="badge badge-mock hidden">Mock data</span>
@@ -48,7 +48,7 @@
 
     <section id="search-panel" class="panel panel-main hidden">
       <h2>What sounds good?</h2>
-      <p class="hint">Tell the chef what sounds good — one craving or several (tacos and salad). Grok plans the search, finds 25 mains &amp; pairings, and refines as you pick up to 5.</p>
+      <p class="hint">Tell me what sounds good — one craving or several. I'll find recipes to inspire you, then help you cook something original at home with what's on hand.</p>
       <label class="field-grow">
         What sounds good?
         <textarea id="sounds-good-input" rows="3" maxlength="500" placeholder="e.g. I want tacos · chicken pasta · salmon with something light"></textarea>
@@ -93,37 +93,56 @@
       <div id="recipes-list" class="meal-card-grid results-scroll"></div>
 
       <div class="selection-bar">
-        <p id="selection-count" class="hint">Select the recipes you want to make.</p>
-        <button type="button" id="inspired-btn" class="btn-primary" disabled>Inspire my own creation</button>
+        <p id="selection-count" class="hint">Select up to 5 meals that inspire what you want to cook.</p>
+        <button type="button" id="inspired-btn" class="btn-primary" disabled>Build my inspire dash</button>
       </div>
     </section>
 
     <section id="inspired-panel" class="panel hidden">
-      <button type="button" id="back-to-results" class="btn-ghost">← Back to recipes</button>
+      <button type="button" id="back-to-results" class="btn-ghost">← Back to lineup</button>
+      <h2 id="inspired-title">Your inspire dash</h2>
+      <p id="inspired-hint" class="hint">Meals you picked plus every ingredient they call for. Check what you have — the chef competes with only that.</p>
+      <div id="inspire-dash-meals" class="inspire-dash-meals"></div>
       <section id="creation-insight" class="creation-insight hidden"></section>
-      <h2 id="inspired-title">Ingredients</h2>
-      <p id="inspired-hint" class="hint">Check each ingredient you have. We'll suggest alternatives for anything you leave unchecked.</p>
+      <h3 class="inspire-subhead">Pantry check</h3>
       <div id="pantry-checklist" class="pantry-checklist"></div>
       <div id="substitutions-block" class="substitutions-block hidden">
         <h3>Suggested alternatives</h3>
-        <p class="hint">Approve swaps to use — cooking steps will adjust automatically.</p>
+        <p class="hint">Approve swaps — the chef will use them in the competition plate.</p>
         <div id="substitutions-list"></div>
       </div>
       <div class="inspired-actions">
-        <button type="button" id="start-cook-btn" class="btn-primary" disabled>Start cooking</button>
+        <button type="button" id="present-judge-btn" class="btn-primary" disabled>Chef, present your dish</button>
       </div>
       <p id="inspired-status" class="status" role="status"></p>
     </section>
 
+    <section id="judge-panel" class="panel hidden">
+      <button type="button" id="back-to-inspired-from-judge" class="btn-ghost">← Back to inspire dash</button>
+      <p class="judge-eyebrow">You are the judge</p>
+      <h2 id="judge-heading">Chef's pitch</h2>
+      <p id="judge-lead" class="hint">The chef studied your craving and pantry. Approve the plate to receive instructor-level steps.</p>
+      <article id="chef-proposal" class="chef-proposal hidden"></article>
+      <div class="judge-actions">
+        <button type="button" id="approve-cook-btn" class="btn-primary" disabled>Approve — teach me how</button>
+        <button type="button" id="re-pitch-btn" class="btn-secondary">Ask for another pitch</button>
+      </div>
+      <p id="judge-status" class="status" role="status"></p>
+    </section>
+
     <section id="cook-panel" class="panel hidden">
-      <button type="button" id="back-to-inspired" class="btn-ghost">← Back to ingredients</button>
+      <button type="button" id="back-to-judge" class="btn-ghost">← Back to judge</button>
       <h2 id="cook-title"></h2>
       <p id="cook-meta" class="hint"></p>
       <div class="step-mode-row">
-        <button type="button" id="mode-beginner" class="btn-chip active">Full steps + tips</button>
+        <button type="button" id="mode-beginner" class="btn-chip active">Instructor steps + tips</button>
         <button type="button" id="mode-direct" class="btn-chip">Keep it direct</button>
       </div>
       <ol id="cook-steps" class="recipe-steps"></ol>
+      <div class="cook-save-row">
+        <button type="button" id="save-recipe-btn" class="btn-secondary">Save to my recipe file</button>
+        <p id="save-recipe-status" class="status" role="status"></p>
+      </div>
     </section>
 
     <section id="recipe-panel" class="panel hidden">
@@ -140,10 +159,28 @@
   </main>
 
   <footer class="site-footer">
-    <p id="footer-note">AlchemyPantry · Grok matches cravings to recipes</p>
+    <p id="footer-note">AlchemyPantry · Discover what sounds good, cook it at home</p>
     <p id="build-tag" class="build-tag" aria-hidden="true"></p>
   </footer>
 
-  <script src="/static/app.js?v=20250606-grok-chef"></script>
+  <div id="guest-save-modal" class="modal hidden" role="dialog" aria-labelledby="guest-save-title">
+    <div class="modal-card">
+      <h2 id="guest-save-title">Save this recipe</h2>
+      <p class="hint">Create a free account to keep this dish in your personal recipe file. Guests can cook — members can save.</p>
+      <div class="auth-tabs" role="tablist">
+        <button type="button" class="active" data-guest-auth-mode="register" id="guest-auth-register">Create account</button>
+        <button type="button" data-guest-auth-mode="login" id="guest-auth-login">Sign in</button>
+      </div>
+      <form id="guest-save-form" novalidate>
+        <label>Email <input name="email" type="email" required autocomplete="email" /></label>
+        <label>Password <input name="password" type="password" required minlength="8" autocomplete="new-password" /></label>
+        <button type="submit" class="btn-primary btn-wide" id="guest-save-submit">Create account &amp; save</button>
+      </form>
+      <button type="button" id="guest-save-dismiss" class="btn-ghost btn-wide">Not now</button>
+      <p id="guest-save-status" class="status" role="status"></p>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=20250606-judge-save"></script>
 </body>
 </html>
