@@ -894,6 +894,9 @@ async function bootstrap() {
   try {
     const health = await api("/healthz");
     if ($("build-tag") && health.version) $("build-tag").textContent = `Build ${health.version}`;
+    if ($("ui-version-badge") && health.version) {
+      $("ui-version-badge").textContent = `UI ${health.version}`;
+    }
     meta = await api("/search/meta");
     renderFilterMenu("diet-options", meta.diets, "diet");
     renderFilterMenu("intolerance-options", meta.intolerances, "intolerance");

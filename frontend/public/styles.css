@@ -112,11 +112,66 @@ textarea { resize: vertical; min-height: 5rem; }
 
 .field-grow { flex: 1; }
 
+.search-command-center {
+  margin-bottom: 1.25rem;
+  padding: 1.1rem 1.15rem;
+  border: 2px solid var(--green);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f0f9f4 0%, #fff 100%);
+  box-shadow: 0 4px 18px rgba(45, 106, 79, 0.12);
+}
+
+.search-command-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.search-command-head h2 {
+  margin: 0;
+}
+
+.ui-version-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.search-input-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.search-input-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--green);
+}
+
+.filter-section-label {
+  margin: 0 0 0.55rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .search-bar-row {
   display: flex;
   gap: 0.65rem;
-  align-items: stretch;
-  margin-bottom: 1rem;
+  align-items: flex-end;
+  margin-bottom: 0;
 }
 
 .search-bar-row textarea {

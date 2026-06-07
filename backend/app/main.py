@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from app.api import (
     advisor_router,
     auth_router,
@@ -33,7 +33,7 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 # Bump when shipping UI changes — breaks browser cache for static assets.
-APP_VERSION = os.environ.get("APP_VERSION", "20250606-search-ui")
+APP_VERSION = os.environ.get("APP_VERSION", "20250607-search-v2")
 
 
 @asynccontextmanager
@@ -119,5 +119,7 @@ if STATIC_DIR.exists():
     async def index():
         index_file = STATIC_DIR / "index.html"
         if index_file.exists():
-            return FileResponse(index_file, headers=_no_cache_headers())
+            html = index_file.read_text(encoding="utf-8")
+            html = html.replace("__APP_VERSION__", APP_VERSION)
+            return HTMLResponse(content=html, headers=_no_cache_headers())
         return {"message": "AlchemyPantry API"}
