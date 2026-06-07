@@ -397,6 +397,8 @@ def _map_complex_card(info: dict[str, Any], *, category: str) -> dict[str, Any]:
     score = info.get("spoonacularScore")
     popularity = float(likes or score or 0)
 
+    cuisines = [str(c).lower() for c in (info.get("cuisines") or [])]
+
     return {
         "id": info["id"],
         "title": info.get("title") or "Recipe",
@@ -407,6 +409,7 @@ def _map_complex_card(info: dict[str, Any], *, category: str) -> dict[str, Any]:
         "servings": info.get("servings"),
         "source_url": info.get("sourceUrl"),
         "diets": diets,
+        "cuisines": cuisines,
         "ingredient_names": ingredient_names,
         "aggregate_likes": likes,
         "spoonacular_score": score,

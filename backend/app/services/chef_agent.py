@@ -1,4 +1,4 @@
-"""Grok chef agent: parse cravings, search terms, curate 25 mains + sides."""
+"""Grok chef agent: parse cravings, search terms, curate 12 main courses."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ Think street food, food trucks, regional icons, AND home versions. Every search 
 Output ONLY valid JSON:
 {
   "chef_headline": "one vivid line tied to THEIR exact craving",
-  "chef_intro": "2-3 sentences: you will show street-style + popular home versions + easy accent sides that cite why they pair",
+  "chef_intro": "2-3 sentences: you will show street-style + popular home versions across the full dish family (taco → burrito, fajita, quesadilla, etc.)",
   "craving_threads": [
     {
       "label": "short name e.g. Tacos",
@@ -50,29 +50,28 @@ RULES:
 - pairing_cites: one entry per side term explaining the pairing chemistry.
 - Adjacent dishes count (tacos → burrito, fajita, quesadilla)."""
 
-CHEF_CURATE = """You are the same executive chef. You receive Spoonacular candidates PRE-SORTED by relevance, the chef plan, and what_sounds_good.
+CHEF_CURATE = """You are the same executive chef. You receive Spoonacular MAIN-COURSE candidates PRE-SORTED by relevance, the chef plan, and what_sounds_good.
 
-Pick exactly 25 recipes: ~18 mains + ~7 sides/salads/dips. REJECT candidates whose title does not match the craving — no random eggs, smoothies, or unrelated dishes.
+Pick exactly 12 MAIN COURSES only — no sides, salads, or dips. REJECT candidates whose title does not match the craving — no random eggs, smoothies, or unrelated dishes.
 
 Output ONLY valid JSON:
 {
   "recipes": [
     {
       "id": <candidate id only>,
-      "fit_note": "MUST cite relevance: for mains name style (street/home/regional) + why it hits the urge; for sides end with 'Pairs because: ...' citing acid/fat/crunch/heat accent",
-      "thread_label": "thread name | Street food | Pairing accent | Shared bridge"
+      "fit_note": "MUST cite relevance: name style (street/home/regional/family-adjacent) + why it hits the urge",
+      "thread_label": "thread name | Street food | Dish family | Shared bridge"
     }
   ]
 }
 
 Rules:
 - Every pick must clearly connect to what_sounds_good — if you cannot explain it in fit_note, do NOT pick it.
-- Include several street-food or food-truck style mains when the craving fits tacos, burgers, noodles, etc.
-- ~7 sides: popular, easy, with fit_note ending "Pairs because: [flavor logic]".
-- Use pairing_cites from chef_plan when available.
+- Include street-food or food-truck style mains when the craving fits tacos, burgers, noodles, etc.
+- Include same-family adjacents (taco → burrito, fajita, quesadilla, enchilada).
 - Prefer higher-relevance candidates (listed first)."""
 
-CHEF_REFINE = """You are the executive chef. The cook selected up to 5 recipes from your lineup. Refresh the OTHER slots (keep their selections) with mains and sides that pair better with what they chose.
+CHEF_REFINE = """You are the executive chef. The cook selected up to 5 main courses from your lineup. Refresh the OTHER slots (keep their selections) with mains that better match their craving and picks.
 
 Output ONLY valid JSON:
 {
@@ -84,8 +83,7 @@ Output ONLY valid JSON:
 
 Rules:
 - Must include ALL selected_ids in output (unchanged fit_note ok).
-- Fill to 25 total using candidates only.
-- Favor sides that pair with selections."""
+- Fill to 12 total MAIN COURSES using candidates only — no sides."""
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -205,8 +203,8 @@ def mock_analyze(what_sounds_good: str, protein_filter: str | None = None) -> di
     return {
         "chef_headline": "Let me show you the full landscape",
         "chef_intro": (
-            "I'm pulling real recipes across every preparation style — mains and sides that "
-            "actually belong on the same plate. Select up to five and I'll refine the rest around your picks."
+            "I'm pulling main courses across every preparation style in the dish family — "
+            "street tacos, burritos, fajitas, and more. Select up to five and I'll refine the rest around your picks."
         ),
         "craving_threads": threads,
         "shared_bridge": {
@@ -265,68 +263,34 @@ def _apply_pairing_cites(curated: list[dict[str, Any]], plan: dict[str, Any]) ->
         card["fit_note"] = f"{note} Pairs because: {cite}".strip()
 
 
-def _mock_curate(plan: dict[str, Any], candidates: list[dict[str, Any]], limit: int = 25) -> list[dict[str, Any]]:
-    mains = [c for c in candidates if c.get("category") == "main"]
-    sides = [c for c in candidates if c.get("category") in ("side", "salad", "dip")]
-    other = [c for c in candidates if c not in mains and c not in sides]
+def _mock_curate(
+    plan: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    limit: int = 12,
+    *,
+    mains_only: bool = True,
+) -> list[dict[str, Any]]:
+    pool = [c for c in candidates if c.get("category") not in ("side", "salad", "dip")] if mains_only else list(candidates)
+    mains = [c for c in pool if c.get("category") == "main"]
+    other = [c for c in pool if c not in mains]
 
     picked: list[dict[str, Any]] = []
     seen: set[int] = set()
+    label = plan["craving_threads"][0]["label"] if plan.get("craving_threads") else "Main"
 
-    def take(pool: list, n: int, label: str) -> None:
-        for card in pool:
-            if card["id"] in seen:
-                continue
-            c = dict(card)
-            c["fit_note"] = c.get("fit_note") or f"Chef pick — {label}."
-            c["thread_label"] = label
-            picked.append(c)
-            seen.add(card["id"])
-            if len(picked) >= limit:
-                return
-            if sum(1 for x in picked if x.get("category") == "main") >= 18 and card.get("category") == "main":
-                continue
-
-    target_mains = min(18, max(12, limit - 7))
-    for card in mains[:target_mains]:
+    for card in mains + other:
         if len(picked) >= limit:
             break
         if card["id"] in seen:
             continue
         c = dict(card)
-        label = plan["craving_threads"][0]["label"] if plan.get("craving_threads") else "Main"
-        c["fit_note"] = f"Hits your craving — {label.lower()} style worth comparing."
-        c["thread_label"] = label
+        c["category"] = "main"
+        c["fit_note"] = c.get("fit_note") or f"Hits your craving — {label.lower()} style worth comparing."
+        c["thread_label"] = c.get("thread_label") or label
         picked.append(c)
         seen.add(card["id"])
 
-    bridge = (plan.get("shared_bridge") or {}).get("label", "Shared bridge")
-    for card in sides + other:
-        if len(picked) >= limit:
-            break
-        if card["id"] in seen:
-            continue
-        c = dict(card)
-        from app.services.chef_relevance import pairing_cite_for_term
-
-        cite = pairing_cite_for_term(plan, card.get("title", ""))
-        c["fit_note"] = f"Popular easy side. Pairs because: {cite}"
-        c["thread_label"] = "Pairing accent"
-        picked.append(c)
-        seen.add(card["id"])
-
-    for card in mains + sides + other:
-        if len(picked) >= limit:
-            break
-        if card["id"] in seen:
-            continue
-        c = dict(card)
-        picked.append(c)
-        seen.add(card["id"])
-
-    result = picked[:limit]
-    _apply_pairing_cites(result, plan)
-    return result
+    return picked[:limit]
 
 
 async def curate_lineup(
@@ -334,14 +298,22 @@ async def curate_lineup(
     candidates: list[dict[str, Any]],
     *,
     selected_ids: list[int] | None = None,
-    limit: int = 25,
+    limit: int = 12,
+    mains_only: bool = True,
 ) -> tuple[list[dict[str, Any]], bool]:
     selected_ids = selected_ids or []
+    if mains_only:
+        candidates = [c for c in candidates if c.get("category") not in ("side", "salad", "dip")]
     by_id = {c["id"]: c for c in candidates}
 
     if not settings.xai_key or not candidates:
         locked = [dict(by_id[i]) for i in selected_ids if i in by_id]
-        rest = _mock_curate(plan, [c for c in candidates if c["id"] not in selected_ids], limit - len(locked))
+        rest = _mock_curate(
+            plan,
+            [c for c in candidates if c["id"] not in selected_ids],
+            limit - len(locked),
+            mains_only=mains_only,
+        )
         return (locked + rest)[:limit], True
 
     slim = [
@@ -394,5 +366,10 @@ async def curate_lineup(
         pass
 
     locked = [dict(by_id[i]) for i in selected_ids if i in by_id]
-    rest = _mock_curate(plan, [c for c in candidates if c["id"] not in selected_ids], limit - len(locked))
+    rest = _mock_curate(
+        plan,
+        [c for c in candidates if c["id"] not in selected_ids],
+        limit - len(locked),
+        mains_only=mains_only,
+    )
     return (locked + rest)[:limit], True

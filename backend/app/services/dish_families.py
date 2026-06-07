@@ -153,3 +153,10 @@ def cuisine_for_anchor(anchor: str | None) -> str | None:
     if not anchor or anchor not in DISH_FAMILIES:
         return None
     return DISH_FAMILIES[anchor].get("cuisine")
+
+
+def family_adjacent_queries(anchor: str | None) -> list[str]:
+    """All Spoonacular queries for a dish family (taco → burrito, fajita, etc.)."""
+    if not anchor or anchor not in DISH_FAMILIES:
+        return []
+    return list(DISH_FAMILIES[anchor].get("queries") or [])

@@ -30,7 +30,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.get("/meta", response_model=MetaResponse)
 async def search_meta():
-    from app.services.filter_options import PROTEIN_OPTIONS, SIDE_OPTIONS
+    from app.services.filter_options import CUISINE_OPTIONS, PROTEIN_OPTIONS, SIDE_OPTIONS
 
     return MetaResponse(
         mock_mode=settings.mock_mode,
@@ -41,6 +41,7 @@ async def search_meta():
         health_conditions=[DietOption(**d) for d in mock_data.HEALTH_CONDITION_OPTIONS],
         protein_options=[DietOption(**d) for d in PROTEIN_OPTIONS],
         side_options=[DietOption(**d) for d in SIDE_OPTIONS],
+        cuisine_options=[DietOption(**d) for d in CUISINE_OPTIONS],
     )
 
 
@@ -64,6 +65,7 @@ async def search_craving_endpoint(body: CravingSearchRequest):
         protein_filter=protein_filter,
         protein_filters=protein_filters,
         side_filters=body.side_filters,
+        cuisine_filters=body.cuisine_filters,
         selected_recipe_ids=body.selected_recipe_ids,
         diets=body.diets,
         intolerances=body.intolerances,
@@ -80,8 +82,8 @@ async def search_craving_endpoint(body: CravingSearchRequest):
         chef_intro=payload.get("chef_intro"),
         craving_threads=[CravingThread(**t) for t in threads],
         shared_bridge=SharedBridge(**bridge) if bridge else None,
-        page_size=payload.get("page_size", 25),
-        popular_top=payload.get("popular_top", 5),
+        page_size=payload.get("page_size", 12),
+        popular_top=payload.get("popular_top", 3),
         candidate_count=payload.get("candidate_count", 0),
         refined=bool(payload.get("refined")),
         mock=is_mock,

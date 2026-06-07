@@ -152,6 +152,7 @@ class MetaResponse(BaseModel):
     health_conditions: list[DietOption]
     protein_options: list[DietOption] = []
     side_options: list[DietOption] = []
+    cuisine_options: list[DietOption] = []
 
 
 class AdvisorRecipeInput(BaseModel):
@@ -250,6 +251,7 @@ class CravingSearchRequest(BaseModel):
     protein_filter: str | None = Field(default=None, max_length=80)
     protein_filters: list[str] = Field(default_factory=list, max_length=5)
     side_filters: list[str] = Field(default_factory=list, max_length=8)
+    cuisine_filters: list[str] = Field(default_factory=list, max_length=5)
     selected_recipe_ids: list[int] = Field(default_factory=list, max_length=5)
     diets: list[str] = []
     intolerances: list[str] = []
@@ -264,8 +266,8 @@ class CravingSearchResponse(BaseModel):
     chef_intro: str | None = None
     craving_threads: list[CravingThread] = []
     shared_bridge: SharedBridge | None = None
-    page_size: int = 25
-    popular_top: int = 5
+    page_size: int = 12
+    popular_top: int = 3
     candidate_count: int = 0
     refined: bool = False
     mock: bool = False

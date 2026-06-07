@@ -6,8 +6,10 @@ import re
 from typing import Any
 
 from app.services.dish_families import (
+    cuisine_for_anchor,
     detect_dish_anchor,
     dish_keywords,
+    family_adjacent_queries,
     matches_dish_family,
     mentions_protein,
 )
@@ -107,17 +109,49 @@ def _query_words(text: str) -> list[str]:
     ]
 
 
+def _matches_cuisine(
+    card: dict[str, Any],
+    cuisine_filters: list[str],
+    *,
+    dish_anchor: str | None = None,
+) -> bool:
+    if not cuisine_filters:
+        return True
+    card_cuisines = [c.lower() for c in (card.get("cuisines") or [])]
+    source_cuisine = (card.get("source_cuisine") or "").lower()
+    blob = _blob(card)
+    anchor_cuisine = cuisine_for_anchor(dish_anchor)
+    filters = [c.lower() for c in cuisine_filters]
+    if anchor_cuisine and anchor_cuisine in filters and matches_dish_family(card, dish_anchor):
+        return True
+    for cuisine in filters:
+        if source_cuisine and (source_cuisine == cuisine or cuisine in source_cuisine):
+            return True
+        if cuisine in card_cuisines:
+            return True
+        if cuisine in blob:
+            return True
+        if cuisine.replace(" ", "-") in blob or cuisine.replace(" ", "") in blob:
+            return True
+    return False
+
+
 def enrich_search_plan(
     plan: dict[str, Any],
     what_sounds_good: str,
     *,
     side_filters: list[str] | None = None,
+    cuisine_filters: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Add dish anchor, street-food queries, and accent pairing terms."""
+    """Add dish anchor, family adjacents, street-food queries, and pairing terms."""
     plan = dict(plan)
     anchor, family_queries = detect_dish_anchor(what_sounds_good)
     plan["dish_anchor"] = anchor
     plan["what_sounds_good"] = what_sounds_good
+    plan["cuisine_filters"] = [c.strip().lower() for c in (cuisine_filters or []) if c]
+
+    adjacent = family_adjacent_queries(anchor)
+    plan["family_adjacent_queries"] = adjacent
 
     for thread in plan.get("craving_threads") or []:
         terms = list(thread.get("search_terms") or [])
@@ -125,11 +159,10 @@ def enrich_search_plan(
             for st in STREET_FOOD_TERMS[anchor][:4]:
                 if st not in terms:
                     terms.insert(0, st)
-        if family_queries:
-            for fq in family_queries[:6]:
-                if fq not in terms:
-                    terms.append(fq)
-        thread["search_terms"] = terms[:10]
+        for fq in (family_queries or []) + adjacent:
+            if fq not in terms:
+                terms.append(fq)
+        thread["search_terms"] = terms[:14]
 
     street_terms: list[str] = []
     if anchor and anchor in STREET_FOOD_TERMS:
@@ -214,6 +247,14 @@ def score_candidate(
     if is_side and ("easy" in blob or "quick" in blob or "simple" in blob):
         score += 4.0
 
+    cuisine_filters = plan.get("cuisine_filters") or []
+    anchor = plan.get("dish_anchor")
+    if cuisine_filters:
+        if _matches_cuisine(card, cuisine_filters, dish_anchor=anchor):
+            score += 16.0
+        else:
+            score -= 20.0
+
     # Penalize obvious mismatches when we have a strong anchor
     if anchor and not is_side and not matches_dish_family(card, anchor):
         mismatch_markers = {
@@ -235,9 +276,13 @@ def rank_and_filter_candidates(
     what_sounds_good: str = "",
     max_pool: int = 70,
     min_score: float = 10.0,
+    mains_only: bool = False,
 ) -> list[dict[str, Any]]:
     if not candidates:
         return []
+
+    if mains_only:
+        candidates = [c for c in candidates if c.get("category") not in ("side", "salad", "dip")]
 
     scored: list[tuple[dict[str, Any], float]] = []
     for card in candidates:
@@ -248,15 +293,12 @@ def rank_and_filter_candidates(
 
     scored.sort(key=lambda x: x[1], reverse=True)
     strong = [c for c, s in scored if s >= min_score]
-    pool = strong if len(strong) >= 20 else [c for c, _ in scored]
+    pool = strong if len(strong) >= 12 else [c for c, _ in scored]
 
-    mains = [c for c in pool if c.get("category") == "main"]
-    sides = [c for c in pool if c.get("category") in ("side", "salad", "dip")]
-    other = [c for c in pool if c not in mains and c not in sides]
+    if mains_only:
+        pool = [c for c in pool if c.get("category") not in ("side", "salad", "dip")]
 
-    # Ensure sides present for curator
-    ordered = mains + sides + other
-    return ordered[:max_pool]
+    return pool[:max_pool]
 
 
 def pairing_cite_for_term(plan: dict[str, Any], term: str) -> str:

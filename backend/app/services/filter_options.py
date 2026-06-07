@@ -13,6 +13,27 @@ PROTEIN_OPTIONS = [
     {"value": "vegetarian", "label": "Vegetarian"},
 ]
 
+CUISINE_OPTIONS = [
+    {"value": "mexican", "label": "Mexican"},
+    {"value": "italian", "label": "Italian"},
+    {"value": "chinese", "label": "Chinese"},
+    {"value": "japanese", "label": "Japanese"},
+    {"value": "thai", "label": "Thai"},
+    {"value": "indian", "label": "Indian"},
+    {"value": "korean", "label": "Korean"},
+    {"value": "vietnamese", "label": "Vietnamese"},
+    {"value": "greek", "label": "Greek"},
+    {"value": "mediterranean", "label": "Mediterranean"},
+    {"value": "middle eastern", "label": "Middle Eastern"},
+    {"value": "american", "label": "American"},
+    {"value": "southern", "label": "Southern US"},
+    {"value": "cajun", "label": "Cajun / Creole"},
+    {"value": "latin american", "label": "Latin American"},
+    {"value": "spanish", "label": "Spanish"},
+    {"value": "french", "label": "French"},
+    {"value": "caribbean", "label": "Caribbean"},
+]
+
 SIDE_OPTIONS = [
     {"value": "green salad", "label": "Green / lettuce salad"},
     {"value": "kale salad", "label": "Kale salad"},
@@ -50,4 +71,5 @@ SIDE_OPTIONS = [
 ]
 
 PROTEIN_VALUES = [p["value"] for p in PROTEIN_OPTIONS]
+CUISINE_VALUES = [c["value"] for c in CUISINE_OPTIONS]
 SIDE_VALUES = [s["value"] for s in SIDE_OPTIONS]

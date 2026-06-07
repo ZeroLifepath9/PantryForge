@@ -347,13 +347,13 @@ textarea { resize: vertical; min-height: 5rem; }
 .results-tab-pane .recipe-steps,
 .results-tab-pane .link-row,
 .results-tab-pane .step-mode-row {
-  max-width: 960px;
+  max-width: 1080px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .results-tab-pane .tab-header {
-  max-width: 960px;
+  max-width: 1080px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -1075,6 +1075,7 @@ textarea { resize: vertical; min-height: 5rem; }
 
 .meal-card-grid {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   min-height: 4rem;
 }
@@ -1394,11 +1395,20 @@ textarea { resize: vertical; min-height: 5rem; }
   font-family: Fraunces, Georgia, serif;
 }
 
+@media (max-width: 900px) {
+  .meal-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .result-card summary {
     grid-template-columns: 56px 1fr;
   }
   .tier { grid-column: 2; justify-self: start; }
+  .meal-card-grid {
+    grid-template-columns: 1fr;
+  }
   .meal-card-inner {
     flex-direction: column;
   }

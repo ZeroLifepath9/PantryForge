@@ -7,6 +7,7 @@ let meta = {
   health_conditions: [],
   protein_options: [],
   side_options: [],
+  cuisine_options: [],
   mock_mode: true,
   xai_configured: false,
   spoonacular_configured: false,
@@ -83,6 +84,10 @@ function selectedSides() {
   return selectedFromMenu("side-options");
 }
 
+function selectedCuisines() {
+  return selectedFromMenu("cuisine-options");
+}
+
 function updateFilterCount(menuId, countId) {
   const n = document.querySelectorAll(`#${menuId} input:checked`).length;
   const el = $(countId);
@@ -95,6 +100,7 @@ function updateAllFilterCounts() {
   updateFilterCount("diet-options", "diet-count");
   updateFilterCount("intolerance-options", "allergy-count");
   updateFilterCount("health-condition-options", "medical-count");
+  updateFilterCount("cuisine-options", "cuisine-count");
   updateFilterCount("protein-options", "protein-count");
   updateFilterCount("side-options", "side-count");
 }
@@ -363,6 +369,13 @@ function renderParsedCraving(parsed) {
   }
   if (parsed.shared_bridge?.label) chips.push(`+ ${parsed.shared_bridge.label}`);
   if (parsed.protein) chips.push(`Protein: ${parsed.protein}`);
+  if (parsed.cuisine) chips.push(`Cuisine: ${parsed.cuisine}`);
+  for (const c of selectedCuisines()) {
+    const label = meta.cuisine_options?.find((o) => o.value === c)?.label || c;
+    if (!chips.some((chip) => chip.toLowerCase().includes(label.toLowerCase()))) {
+      chips.push(`Cuisine: ${label}`);
+    }
+  }
   if (!chips.length && parsed.main_query) chips.push(parsed.main_query);
   if (!chips.length) {
     el.classList.add("hidden");
@@ -416,13 +429,12 @@ function renderCravingResults(data, opts = {}) {
   const recipes = normalizeRecipes(data);
   const total = recipes.length;
   const parsed = data.parsed || {};
-  const pageSize = data.page_size || 25;
-  const popularTop = data.popular_top || 5;
+  const pageSize = data.page_size || 12;
   $("results-heading").textContent = total
-    ? `Chef's lineup (${total})`
-    : "Chef's lineup";
+    ? `Chef's main courses (${total})`
+    : "Chef's main courses";
   $("results-message").textContent = data.message || (total
-    ? `${total} mains & pairings — select up to ${MAX_RECIPE_SELECT} to refine.`
+    ? `${total} of ${pageSize} mains — same dish family included. Select up to ${MAX_RECIPE_SELECT} to refine.`
     : "No matches yet.");
   renderChefInsight(data);
   renderParsedCraving(parsed);
@@ -444,6 +456,7 @@ function renderCravingResults(data, opts = {}) {
 function searchFilterPayload() {
   const proteins = selectedProteins();
   const sides = selectedSides();
+  const cuisines = selectedCuisines();
   return {
     diets: selectedDiets(),
     intolerances: selectedIntolerances(),
@@ -451,6 +464,7 @@ function searchFilterPayload() {
     protein_filters: proteins,
     protein_filter: proteins[0] || null,
     side_filters: sides,
+    cuisine_filters: cuisines,
   };
 }
 
@@ -929,6 +943,7 @@ async function bootstrap() {
     renderFilterMenu("diet-options", meta.diets, "diet");
     renderFilterMenu("intolerance-options", meta.intolerances, "intolerance");
     renderFilterMenu("health-condition-options", meta.health_conditions, "health-condition");
+    renderFilterMenu("cuisine-options", meta.cuisine_options, "cuisine");
     renderFilterMenu("protein-options", meta.protein_options, "protein");
     renderFilterMenu("side-options", meta.side_options, "side");
     updateAllFilterCounts();
@@ -1124,7 +1139,7 @@ document.addEventListener("change", (e) => {
     schedulePrefsSave();
     updateAllFilterCounts();
   }
-  if (e.target.matches("#protein-options input, #side-options input")) {
+  if (e.target.matches("#cuisine-options input, #protein-options input, #side-options input")) {
     updateAllFilterCounts();
   }
   if (e.target.matches(".pantry-have")) {
