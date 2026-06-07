@@ -1142,6 +1142,13 @@ textarea { resize: vertical; min-height: 5rem; }
   font-weight: 600;
 }
 
+.meal-card-cite {
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.4;
+  color: #1b5e40;
+}
+
 .meal-card-summary {
   margin: 0.25rem 0;
   font-size: 0.9rem;

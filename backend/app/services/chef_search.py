@@ -9,6 +9,8 @@ from typing import Any
 from app.config import settings
 from app.services import mock_data
 from app.services.chef_agent import analyze_craving, curate_lineup
+from app.services.chef_relevance import enrich_search_plan, rank_and_filter_candidates
+from app.services.dish_families import cuisine_for_anchor
 from app.services.spoonacular import complex_search
 
 logger = logging.getLogger(__name__)
@@ -93,53 +95,109 @@ def _side_filter_match(card: dict[str, Any], side_filters: list[str]) -> bool:
     return False
 
 
+async def _search_with_cuisine(
+    query: str,
+    *,
+    diets: list[str],
+    intolerances: list[str],
+    number: int,
+    dish_type: str | None,
+    tag: str,
+    cuisine: str | None,
+) -> list[dict[str, Any]]:
+    try:
+        batch = await complex_search(
+            query=query,
+            number=number,
+            diets=diets,
+            intolerances=intolerances,
+            dish_type=dish_type,
+            cuisine=cuisine,
+            sort="popularity",
+            sort_direction="desc",
+        )
+        out = []
+        for card in batch:
+            c = dict(card)
+            c["source_tag"] = tag
+            c["source_queries"] = c.get("source_queries") or [query]
+            if dish_type == "main course":
+                c["category"] = "main"
+            out.append(c)
+        return out
+    except Exception as exc:
+        logger.warning("Spoonacular query %r failed: %s", query, exc)
+        return []
+
+
 async def fetch_candidates(
     plan: dict[str, Any],
     *,
     diets: list[str],
     intolerances: list[str],
     side_filters: list[str] | None = None,
+    what_sounds_good: str = "",
 ) -> list[dict[str, Any]]:
     protein = plan.get("protein")
     side_filters = side_filters or []
-    tasks: list[tuple[str, Any]] = []
+    cuisine = cuisine_for_anchor(plan.get("dish_anchor"))
+    tasks: list[Any] = []
+
+    craving_q = (what_sounds_good or plan.get("what_sounds_good") or "").strip()[:80]
+    if craving_q:
+        tasks.append(_search_with_cuisine(
+            _protein_query(craving_q, protein),
+            diets=diets, intolerances=intolerances,
+            number=12, dish_type=None, tag="Your craving", cuisine=cuisine,
+        ))
+
+    for term in (plan.get("street_food_terms") or [])[:6]:
+        tasks.append(_search_with_cuisine(
+            _protein_query(str(term), protein),
+            diets=diets, intolerances=intolerances,
+            number=8, dish_type=None, tag="Street food", cuisine=cuisine,
+        ))
 
     for thread in plan.get("craving_threads") or []:
         label = thread.get("label", "thread")
-        for term in (thread.get("search_terms") or [])[:5]:
+        for i, term in enumerate((thread.get("search_terms") or [])[:8]):
             q = _protein_query(str(term), protein)
-            tasks.append(("main", _search_term(
+            # Street/adjacent dishes often aren't tagged "main course"
+            dish_type = "main course" if i % 2 == 1 else None
+            tasks.append(_search_with_cuisine(
                 q, diets=diets, intolerances=intolerances,
-                number=8, dish_type="main course", tag=label,
-            )))
+                number=7, dish_type=dish_type, tag=label, cuisine=cuisine,
+            ))
 
     bridge = plan.get("shared_bridge") or {}
     for term in (bridge.get("search_terms") or [])[:4]:
-        tasks.append(("bridge", _search_term(
+        tasks.append(_search_with_cuisine(
             _protein_query(str(term), protein),
             diets=diets, intolerances=intolerances,
-            number=6, dish_type=None, tag=bridge.get("label", "bridge"),
-        )))
+            number=6, dish_type=None, tag=bridge.get("label", "bridge"), cuisine=cuisine,
+        ))
 
-    side_queries = list(plan.get("pairing_side_terms") or [])[:10]
+    side_queries = list(plan.get("pairing_side_terms") or [])[:12]
     if side_filters:
         side_queries = list(side_filters) + [q for q in side_queries if q not in side_filters]
-    for term in side_queries[:10]:
-        tasks.append(("side", _search_term(
-            str(term),
-            diets=diets, intolerances=intolerances,
-            number=6 if side_filters else 5,
-            dish_type=None,
-            tag="pairing",
-        )))
+    for term in side_queries[:12]:
+        for q in (str(term), f"easy {term}"):
+            tasks.append(_search_with_cuisine(
+                q,
+                diets=diets, intolerances=intolerances,
+                number=5,
+                dish_type=None,
+                tag="Pairing accent",
+                cuisine=cuisine,
+            ))
 
     if not tasks:
-        tasks.append(("main", _search_term(
+        tasks.append(_search_with_cuisine(
             "dinner", diets=diets, intolerances=intolerances,
-            number=25, dish_type=None, tag="general",
-        )))
+            number=25, dish_type=None, tag="general", cuisine=None,
+        ))
 
-    results = await asyncio.gather(*[t[1] for t in tasks])
+    results = await asyncio.gather(*tasks)
     candidates: list[dict[str, Any]] = []
     seen: set[int] = set()
 
@@ -171,20 +229,15 @@ def _mock_candidates_from_plan(
             t for th in (plan.get("craving_threads") or [])
             for t in (th.get("search_terms") or [])
         ],
-        "dish_anchor": None,
+        "dish_anchor": plan.get("dish_anchor"),
         "protein": plan.get("protein"),
         "search_terms": [
-            t for th in (plan.get("craving_threads") or [])
-            for t in (th.get("search_terms") or [])
+            *(plan.get("street_food_terms") or []),
+            *[t for th in (plan.get("craving_threads") or []) for t in (th.get("search_terms") or [])],
         ],
         "main_query": what_sounds_good,
+        "search_mode": "dish" if plan.get("dish_anchor") else "chef",
     }
-    if plan.get("craving_threads"):
-        label = (plan["craving_threads"][0].get("label") or "").lower()
-        if "taco" in label:
-            parsed["dish_anchor"] = "taco"
-        elif "chili" in label:
-            parsed["dish_anchor"] = "chili"
 
     cards = mock_data.mock_craving_candidates(
         parsed,
@@ -224,6 +277,8 @@ def _plan_to_parsed(plan: dict[str, Any]) -> dict[str, Any]:
         "mood": None,
         "main_query": threads[0]["label"] if threads else "",
         "pairing_queries": plan.get("pairing_side_terms") or [],
+        "street_food_terms": plan.get("street_food_terms") or [],
+        "dish_anchor": plan.get("dish_anchor"),
         "search_terms": all_terms,
         "needs_protein_prompt": not plan.get("protein"),
         "protein_options": plan.get("protein_options") or [],
@@ -255,6 +310,7 @@ async def chef_search(
         protein_filters=protein_filters,
         side_filters=side_filters,
     )
+    plan = enrich_search_plan(plan, what_sounds_good, side_filters=side_filters)
 
     use_live = bool(settings.spoonacular_key) and not settings.mock_mode
     candidates: list[dict[str, Any]] = []
@@ -267,6 +323,7 @@ async def chef_search(
                 diets=diets,
                 intolerances=intolerances,
                 side_filters=side_filters,
+                what_sounds_good=what_sounds_good,
             )
             if candidates:
                 fetch_mock = False
@@ -287,6 +344,14 @@ async def chef_search(
         preferred = [c for c in candidates if c.get("category") in ("side", "salad", "dip") and _side_filter_match(c, side_filters)]
         other = [c for c in candidates if c not in preferred]
         candidates = preferred + other
+
+    candidates = rank_and_filter_candidates(
+        candidates,
+        plan,
+        what_sounds_good=what_sounds_good,
+        max_pool=70,
+        min_score=10.0,
+    )
 
     recipes, curate_mock = await curate_lineup(
         plan,

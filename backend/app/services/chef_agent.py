@@ -16,55 +16,61 @@ PROTEIN_OPTIONS = [
 CHEF_ANALYZE = """You are an executive chef at the absolute peak of the profession — AlchemyPantry's culinary brain.
 
 The home cook says what sounds good. You interpret like a chef, not a search engine.
+Think street food, food trucks, regional icons, AND home versions. Every search term must be something Spoonacular would actually return.
 
 Output ONLY valid JSON:
 {
-  "chef_headline": "one vivid line",
-  "chef_intro": "2-3 sentences welcoming them and framing how you'll guide the meal",
+  "chef_headline": "one vivid line tied to THEIR exact craving",
+  "chef_intro": "2-3 sentences: you will show street-style + popular home versions + easy accent sides that cite why they pair",
   "craving_threads": [
     {
       "label": "short name e.g. Tacos",
-      "search_terms": ["taco", "street taco", "fish taco", ...],
-      "chef_note": "one sentence why this thread matters"
+      "search_terms": ["8-10 concrete queries: street taco, birria, al pastor, fish taco, carnitas, burrito, ..."],
+      "chef_note": "one sentence why this thread matches what they said"
     }
   ],
   "shared_bridge": {
-    "label": "something both cravings share that they did NOT ask for",
-    "search_terms": ["2-4 spoonacular queries for that bridge dish/side"],
-    "chef_note": "why a top chef would add this — technique or flavor link"
+    "label": "accent they didn't ask for but pros always add",
+    "search_terms": ["2-4 queries for that bridge dish/side"],
+    "chef_note": "cite the flavor logic — acid/fat/crunch/heat link"
   },
-  "pairing_side_terms": ["side dishes that pair with the mains — 4-8 queries"],
+  "street_food_terms": ["4-6 street-food or food-truck style queries matching the craving"],
+  "pairing_side_terms": ["6-10 EASY popular sides/salads — pico, elote, beans, slaw, rice, pickles, etc."],
+  "pairing_cites": {
+    "exact side search term": "one line: why this ACCENTS the main (acid cuts fat, crunch vs soft, etc.)"
+  },
   "protein": null,
   "protein_options": ["chicken","beef","pork","shrimp","fish","salmon","tofu","turkey","lamb","vegetarian"]
 }
 
 RULES:
-- If they name ONE craving (tacos), one thread. If they name TWO+ (tacos and salad, pasta or chicken), one thread PER option.
-- shared_bridge is your professional insight — a dish/side/technique connecting their threads they didn't mention.
-- search_terms = concrete Spoonacular queries (2-6 per thread). Include variations (preparations, styles).
-- protein only if they explicitly named one; else null (UI filters later).
-- pairing_side_terms = sides/salads/dips that complete the plate."""
+- search_terms must be tightly relevant to the user's words — no generic "dinner" or "food".
+- Include STREET variants (street taco, smash burger, pad thai cart style) when the craving fits.
+- pairing_side_terms = popular, easy sides a chef would actually plate alongside — not random salads.
+- pairing_cites: one entry per side term explaining the pairing chemistry.
+- Adjacent dishes count (tacos → burrito, fajita, quesadilla)."""
 
-CHEF_CURATE = """You are the same executive chef. You receive Spoonacular recipe candidates and the chef plan.
+CHEF_CURATE = """You are the same executive chef. You receive Spoonacular candidates PRE-SORTED by relevance, the chef plan, and what_sounds_good.
 
-Pick exactly 25 recipes: roughly 18 mains and 7 sides/salads/dips that pair well. Honor every craving thread with several mains each. Include shared_bridge picks. Sides must complement the mains.
+Pick exactly 25 recipes: ~18 mains + ~7 sides/salads/dips. REJECT candidates whose title does not match the craving — no random eggs, smoothies, or unrelated dishes.
 
 Output ONLY valid JSON:
 {
   "recipes": [
     {
       "id": <candidate id only>,
-      "fit_note": "one chef sentence: technique, pairing role, or why this preparation",
-      "thread_label": "which thread or Shared bridge or Pairing"
+      "fit_note": "MUST cite relevance: for mains name style (street/home/regional) + why it hits the urge; for sides end with 'Pairs because: ...' citing acid/fat/crunch/heat accent",
+      "thread_label": "thread name | Street food | Pairing accent | Shared bridge"
     }
   ]
 }
 
 Rules:
-- Exactly 25 ids from candidates (or all if fewer than 25).
-- Mix categories: mostly main, ~7 sides.
-- fit_note = professional insight, not generic.
-- Distribute across threads when multiple exist."""
+- Every pick must clearly connect to what_sounds_good — if you cannot explain it in fit_note, do NOT pick it.
+- Include several street-food or food-truck style mains when the craving fits tacos, burgers, noodles, etc.
+- ~7 sides: popular, easy, with fit_note ending "Pairs because: [flavor logic]".
+- Use pairing_cites from chef_plan when available.
+- Prefer higher-relevance candidates (listed first)."""
 
 CHEF_REFINE = """You are the executive chef. The cook selected up to 5 recipes from your lineup. Refresh the OTHER slots (keep their selections) with mains and sides that pair better with what they chose.
 
@@ -90,6 +96,44 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(cleaned)
 
 
+def _mock_pairing_terms(lower: str, threads: list[dict]) -> list[str]:
+    from app.services.chef_relevance import PAIRING_ACCENTS, GENERIC_PAIRING_SIDES
+
+    if "taco" in lower or any("taco" in t.get("label", "").lower() for t in threads):
+        pool = PAIRING_ACCENTS.get("taco", [])
+    elif "chili" in lower:
+        pool = PAIRING_ACCENTS.get("chili", [])
+    elif "pasta" in lower:
+        pool = PAIRING_ACCENTS.get("pasta", [])
+    elif "burger" in lower:
+        pool = PAIRING_ACCENTS.get("burger", [])
+    else:
+        pool = GENERIC_PAIRING_SIDES
+    return [t for t, _ in pool[:8]]
+
+
+def _mock_pairing_cites(lower: str) -> dict[str, str]:
+    from app.services.chef_relevance import PAIRING_ACCENTS, GENERIC_PAIRING_SIDES
+
+    if "taco" in lower:
+        pool = PAIRING_ACCENTS.get("taco", [])
+    elif "chili" in lower:
+        pool = PAIRING_ACCENTS.get("chili", [])
+    else:
+        pool = GENERIC_PAIRING_SIDES
+    return {t: c for t, c in pool}
+
+
+def STREET_FROM_MOCK(lower: str, threads: list[dict]) -> list[str]:
+    from app.services.chef_relevance import STREET_FOOD_TERMS
+
+    if "taco" in lower or any("taco" in t.get("label", "").lower() for t in threads):
+        return STREET_FOOD_TERMS.get("taco", [])[:5]
+    if "burger" in lower:
+        return STREET_FOOD_TERMS.get("burger", [])[:4]
+    return []
+
+
 def _split_craving_threads(text: str) -> list[str]:
     lower = text.lower()
     parts = re.split(r"\s+(?:and|or|&|\+|,)\s+", lower)
@@ -103,10 +147,14 @@ def mock_analyze(what_sounds_good: str, protein_filter: str | None = None) -> di
     threads: list[dict[str, Any]] = []
 
     dish_map = {
-        "taco": (["taco", "street taco", "fish taco", "carnitas", "burrito"], "Tacos"),
-        "chili": (["chili", "beef chili", "turkey chili"], "Chili"),
-        "pasta": (["pasta", "spaghetti", "lasagna"], "Pasta"),
-        "pizza": (["pizza", "flatbread pizza"], "Pizza"),
+        "taco": (
+            ["street taco", "birria taco", "al pastor", "fish taco", "carnitas", "carne asada taco", "burrito", "quesadilla"],
+            "Tacos & street food",
+        ),
+        "chili": (["chili", "beef chili", "texas chili", "turkey chili", "chili bowl"], "Chili"),
+        "pasta": (["pasta", "spaghetti", "carbonara", "cacio e pepe"], "Pasta"),
+        "pizza": (["pizza", "margherita pizza", "flatbread"], "Pizza"),
+        "burger": (["smash burger", "burger", "slider"], "Burgers"),
         "salad": (["salad", "grain bowl"], "Salad"),
         "soup": (["soup", "stew"], "Soup"),
     }
@@ -166,10 +214,9 @@ def mock_analyze(what_sounds_good: str, protein_filter: str | None = None) -> di
             "search_terms": bridge_terms,
             "chef_note": "Something you didn't ask for — but it ties the plate together.",
         },
-        "pairing_side_terms": [
-            "black beans", "mexican rice", "guacamole", "pico de gallo",
-            "cilantro lime slaw", "refried beans",
-        ][:6],
+        "street_food_terms": STREET_FROM_MOCK(lower, threads),
+        "pairing_side_terms": _mock_pairing_terms(lower, threads),
+        "pairing_cites": _mock_pairing_cites(lower),
         "protein": protein,
         "protein_options": PROTEIN_OPTIONS,
         "protein_filter": protein_filter,
@@ -205,6 +252,19 @@ async def analyze_craving(
         return plan, True
 
 
+def _apply_pairing_cites(curated: list[dict[str, Any]], plan: dict[str, Any]) -> None:
+    from app.services.chef_relevance import pairing_cite_for_term
+
+    for card in curated:
+        if card.get("category") not in ("side", "salad", "dip"):
+            continue
+        note = card.get("fit_note") or ""
+        if "pairs because" in note.lower():
+            continue
+        cite = pairing_cite_for_term(plan, card.get("title", ""))
+        card["fit_note"] = f"{note} Pairs because: {cite}".strip()
+
+
 def _mock_curate(plan: dict[str, Any], candidates: list[dict[str, Any]], limit: int = 25) -> list[dict[str, Any]]:
     mains = [c for c in candidates if c.get("category") == "main"]
     sides = [c for c in candidates if c.get("category") in ("side", "salad", "dip")]
@@ -234,8 +294,9 @@ def _mock_curate(plan: dict[str, Any], candidates: list[dict[str, Any]], limit: 
         if card["id"] in seen:
             continue
         c = dict(card)
-        c["fit_note"] = "A distinct preparation worth studying."
-        c["thread_label"] = plan["craving_threads"][0]["label"] if plan.get("craving_threads") else "Main"
+        label = plan["craving_threads"][0]["label"] if plan.get("craving_threads") else "Main"
+        c["fit_note"] = f"Hits your craving — {label.lower()} style worth comparing."
+        c["thread_label"] = label
         picked.append(c)
         seen.add(card["id"])
 
@@ -246,8 +307,11 @@ def _mock_curate(plan: dict[str, Any], candidates: list[dict[str, Any]], limit: 
         if card["id"] in seen:
             continue
         c = dict(card)
-        c["fit_note"] = f"Pairs with your mains — {bridge} energy on the plate."
-        c["thread_label"] = "Pairing"
+        from app.services.chef_relevance import pairing_cite_for_term
+
+        cite = pairing_cite_for_term(plan, card.get("title", ""))
+        c["fit_note"] = f"Popular easy side. Pairs because: {cite}"
+        c["thread_label"] = "Pairing accent"
         picked.append(c)
         seen.add(card["id"])
 
@@ -260,7 +324,9 @@ def _mock_curate(plan: dict[str, Any], candidates: list[dict[str, Any]], limit: 
         picked.append(c)
         seen.add(card["id"])
 
-    return picked[:limit]
+    result = picked[:limit]
+    _apply_pairing_cites(result, plan)
+    return result
 
 
 async def curate_lineup(
@@ -284,11 +350,14 @@ async def curate_lineup(
             "title": c.get("title"),
             "category": c.get("category"),
             "summary": (c.get("summary") or "")[:160],
+            "relevance": c.get("_relevance"),
+            "ingredients": (c.get("ingredient_names") or [])[:8],
         }
         for c in candidates
     ]
     payload = {
         "chef_plan": plan,
+        "what_sounds_good": plan.get("what_sounds_good") or "",
         "candidates": slim,
         "selected_ids": selected_ids,
         "target_count": limit,
@@ -319,6 +388,7 @@ async def curate_lineup(
             if len(curated) >= limit:
                 break
         if curated:
+            _apply_pairing_cites(curated, plan)
             return curated, False
     except Exception:
         pass

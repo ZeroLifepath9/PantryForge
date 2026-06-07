@@ -255,7 +255,7 @@ function renderMealCard(recipe) {
         <div class="meal-card-body">
           <span class="meal-card-cat">${categoryLabel(cat)}${popularBadge}${recipe.thread_label ? ` · ${escapeHtml(recipe.thread_label)}` : ""}</span>
           <strong class="result-title">${escapeHtml(recipe.title)}</strong>
-          ${recipe.fit_note ? `<p class="meal-card-fit">${escapeHtml(recipe.fit_note)}</p>` : ""}
+          ${recipe.fit_note ? `<p class="meal-card-fit meal-card-cite">${escapeHtml(recipe.fit_note)}</p>` : ""}
           ${recipe.ready_in_minutes ? `<p class="hint">${recipe.ready_in_minutes} min · ${recipe.servings || "?"} servings</p>` : ""}
           <button type="button" class="btn-ghost btn-small meal-card-open-btn view-recipe-btn" data-view-recipe="${recipe.id}">Cook this — AI steps</button>
         </div>

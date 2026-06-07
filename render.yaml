@@ -19,7 +19,7 @@ services:
       - key: USE_MOCK_DATA
         value: "false"
       - key: APP_VERSION
-        value: "20250607-search-v2"
+        value: "20250607-relevance"
       - key: XAI_API_KEY
         sync: false
       - key: DATABASE_URL
