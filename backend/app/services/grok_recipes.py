@@ -274,6 +274,15 @@ async def search_craving_lineup(
         urls = [p["url"] for p in url_picks]
         cards.extend(await fetch_recipes_parallel(urls[:PAGE_SIZE + 4]))
 
+    if not cards and recipe_source not in ("themealdb", "spoonacular"):
+        from app.services.themealdb import gather_themealdb_hits
+
+        emergency = await gather_themealdb_hits(queries, per_query=14)
+        if emergency:
+            recipe_source = "themealdb"
+            cards = emergency[:PAGE_SIZE]
+            picks = emergency[:PAGE_SIZE]
+
     # Merge judge notes onto cards
     meta_by_url = {p["url"]: p for p in picks if p.get("url")}
     lineup: list[dict[str, Any]] = []

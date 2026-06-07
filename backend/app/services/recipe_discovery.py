@@ -146,32 +146,22 @@ async def discover_recipe_hits(
     if not probe:
         logger.warning("AllRecipes direct scrape returned 0 for %r — trying fallbacks", queries[0])
 
-    # 2. DuckDuckGo → AllRecipes URLs
-    ddg = await _ddg_allrecipes_hits(queries, per_query=per_query)
-    if ddg:
-        logger.info("recipe_discovery: ddg+allrecipes → %d hits", len(ddg))
-        return ddg, "allrecipes-ddg"
-
-    # 3. TheMealDB — always works from cloud
+    # 2. TheMealDB — full recipe JSON, works from cloud (Render, etc.)
     tmdb = await gather_themealdb_hits(queries, per_query=per_query)
-    if len(tmdb) < 6:
-        broad = await gather_themealdb_hits(
-            ["chicken", "pasta", "beef", "fish", "soup", "bake"],
-            per_query=6,
-        )
-        seen = {c["id"] for c in tmdb}
-        for card in broad:
-            if card["id"] not in seen:
-                seen.add(card["id"])
-                tmdb.append(card)
     if tmdb:
         logger.info("recipe_discovery: themealdb → %d hits", len(tmdb))
         return tmdb, "themealdb"
 
-    # 4. Spoonacular API if configured
+    # 3. Spoonacular API if configured
     sp = await _spoonacular_hits(queries, per_query=per_query, diets=diets, intolerances=intolerances)
     if sp:
         logger.info("recipe_discovery: spoonacular → %d hits", len(sp))
         return sp, "spoonacular"
+
+    # 4. DuckDuckGo → AllRecipes URLs (last — often blocked on cloud hosts)
+    ddg = await _ddg_allrecipes_hits(queries, per_query=per_query)
+    if ddg:
+        logger.info("recipe_discovery: ddg+allrecipes → %d hits", len(ddg))
+        return ddg, "allrecipes-ddg"
 
     return [], "none"
