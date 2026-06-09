@@ -36,7 +36,10 @@ _MOOD_SEARCHES: dict[str, list[str]] = {
 
 
 def build_search_queries(parsed: dict[str, Any], what_sounds_good: str) -> list[str]:
-    """Turn parsed intent into short AllRecipes queries — never the full sentence."""
+    """Turn parsed intent into short AllRecipes queries — never the full sentence.
+    For compound inputs (multiple styles like mexican + spicy + chili + tacos + gumbo),
+    generate queries covering EACH idea + combinations so discovery pulls diverse candidates
+    (chili recipes, taco recipes, gumbo, spicy mexican fusions, etc.)."""
     text = (what_sounds_good or "").strip()
     lower = text.lower()
     seen: set[str] = set()
@@ -63,95 +66,114 @@ def build_search_queries(parsed: dict[str, Any], what_sounds_good: str) -> list[
         if mapped and mapped not in ingredients:
             ingredients.append(mapped)
 
-    if dish_anchor or dish_queries:
-        for dq in dish_queries[:5]:
-            add(dq)
-            if protein:
-                add(f"{protein} {dq}")
-            for flavor in flavors[:2]:
-                add(f"{flavor} {dq}")
-        if cuisine and dish_queries:
-            add(f"{cuisine} {dish_queries[0]}")
+    # Core expansion for EVERY dish idea / style mentioned in compound input
+    # (this is the key fix for "chili or tacos or gumbo" etc.)
+    all_dish_ideas = list(dish_queries)
+    if dish_anchor and dish_anchor not in [d.lower() for d in all_dish_ideas]:
+        all_dish_ideas.append(dish_anchor)
+    # Pull rich list from parser (Grok now instructed to output many for compounds)
+    for t in (parsed.get("search_terms") or []):
+        if t and t not in [d.lower() for d in all_dish_ideas]:
+            all_dish_ideas.append(t)
 
-    elif protein:
-        add(protein)
-        add(f"easy {protein}")
-        add(f"baked {protein}")
+    for idea in all_dish_ideas[:10]:
+        add(idea)
+        if protein:
+            add(f"{protein} {idea}")
         for flavor in flavors[:3]:
-            add(f"{flavor} {protein}")
-        for ing in ingredients[:3]:
-            add(f"{protein} {ing}")
-        for starch in starches[:2]:
-            add(f"{protein} {starch}")
-        if mood:
-            for q in _MOOD_SEARCHES.get(mood, [])[:2]:
-                if protein in q or "chicken" in q or mood == "comfort":
-                    add(q.replace("chicken", protein) if "chicken" in q else f"{mood} {protein}")
+            add(f"{flavor} {idea}")
+        if cuisine:
+            add(f"{cuisine} {idea}")
 
-    elif flavors or ingredients:
-        if flavors and ingredients:
-            f0, i0 = flavors[0], ingredients[0]
-            if f0.replace("y", "") not in i0 and i0 not in f0:
-                add(f"{f0} {i0}")
-        for flavor in flavors[:3]:
-            add(f"{flavor} recipe")
+    # If no strong dish ideas extracted, fall back to traditional branches
+    if not all_dish_ideas:
+        if protein:
+            add(protein)
+            add(f"easy {protein}")
+            add(f"baked {protein}")
+            for flavor in flavors[:3]:
+                add(f"{flavor} {protein}")
+            for ing in ingredients[:3]:
+                add(f"{protein} {ing}")
+            for starch in starches[:2]:
+                add(f"{protein} {starch}")
             if mood:
-                add(f"{mood} {flavor}")
-        for ing in ingredients[:4]:
-            add(ing)
-            add(f"{ing} recipe")
-        if "cheese" in ingredients or "cheesy" in flavors:
-            add("cheese")
-            add("mac and cheese")
-            add("cheesy pasta")
-            add("baked pasta")
-            add("casserole")
-        if mood == "comfort":
-            for q in ("bake", "casserole", "soup", "stew", "pasta"):
-                add(q)
+                for q in _MOOD_SEARCHES.get(mood, [])[:2]:
+                    if protein in q or "chicken" in q or mood == "comfort":
+                        add(q.replace("chicken", protein) if "chicken" in q else f"{mood} {protein}")
+        elif flavors or ingredients:
+            if flavors and ingredients:
+                f0, i0 = flavors[0], ingredients[0]
+                if f0.replace("y", "") not in i0 and i0 not in f0:
+                    add(f"{f0} {i0}")
+            for flavor in flavors[:3]:
+                add(f"{flavor} recipe")
+                if mood:
+                    add(f"{mood} {flavor}")
+            for ing in ingredients[:4]:
+                add(ing)
+                add(f"{ing} recipe")
+            if "cheese" in ingredients or "cheesy" in flavors:
+                add("cheese")
+                add("mac and cheese")
+                add("cheesy pasta")
+                add("baked pasta")
+                add("casserole")
+            if mood == "comfort":
+                for q in ("bake", "casserole", "soup", "stew", "pasta"):
+                    add(q)
+            elif mood:
+                for q in _MOOD_SEARCHES.get(mood, [])[:4]:
+                    add(q)
         elif mood:
-            for q in _MOOD_SEARCHES.get(mood, [])[:4]:
+            for q in _MOOD_SEARCHES.get(mood, []):
                 add(q)
+        elif starches:
+            for s in starches[:3]:
+                add(s)
+                add(f"easy {s}")
 
-    elif mood:
-        for q in _MOOD_SEARCHES.get(mood, []):
-            add(q)
+    # Cuisine + flavor + explicit combinations for "things that combine them all"
+    if cuisine:
+        add(cuisine)
+        for flavor in flavors[:2]:
+            add(f"{flavor} {cuisine}")
+        if any(f in ("spicy", "hot") for f in flavors) or "spicy" in lower:
+            add(f"spicy {cuisine}")
+            add(f"mexican spicy" if cuisine == "mexican" else f"{cuisine} spicy")
+    for flavor in flavors[:3]:
+        add(flavor)
+        if cuisine:
+            add(f"{cuisine} {flavor}")
 
-    elif starches:
-        for s in starches[:3]:
-            add(s)
-            add(f"easy {s}")
+    # From parser's search_terms (now rich for compounds thanks to updated prompt)
+    for term in (parsed.get("search_terms") or [])[:12]:
+        add(term)
 
-    words = [w for w in re.findall(r"[a-z]{4,}", lower) if w not in _STOP]
-    if (
-        len(text.split()) <= 3
-        and text
-        and not mood
-        and not protein
-        and not dish_anchor
-        and not flavors
-        and not ingredients
-    ):
-        add(text)
-
+    # Main query and raw keywords from original
     mq = (parsed.get("main_query") or "").strip()
     if mq and len(mq.split()) <= 4 and mq.lower() != text.lower():
         add(mq)
 
-    if cuisine and not dish_queries and protein:
-        add(f"{cuisine} {protein}")
+    words = [w for w in re.findall(r"[a-z]{4,}", lower) if w not in _STOP]
+    for w in words[:8]:
+        add(w)
 
-    if not out and text:
-        anchor, family = detect_dish_anchor(text)
-        if family:
-            for fq in family[:4]:
-                add(fq)
-        elif len(text.split()) <= 3:
-            add(text)
-        else:
-            add(mq or words[0] if words else "dinner")
+    # Fusion/combo queries for the "or" list of ideas
+    if len(all_dish_ideas) >= 2:
+        # e.g. "chili tacos gumbo", "mexican spicy chili"
+        combo = " ".join([i for i in all_dish_ideas[:3] if i])
+        if combo:
+            add(combo)
+        if cuisine and flavors:
+            add(f"{cuisine} {' '.join(flavors[:2])}")
 
-    return out[:10]
+    # Final dedup + limit (higher to support 15-25 results)
+    deduped = []
+    for q in out:
+        if q.lower() not in {d.lower() for d in deduped}:
+            deduped.append(q)
+    return deduped[:18]
 
 
 def build_match_keywords(parsed: dict[str, Any], what_sounds_good: str) -> list[str]:

@@ -17,11 +17,13 @@ from app.services.xai_client import chat_completion
 PARSER_SYSTEM = """You translate what a home cook says into structured recipe-search criteria.
 Think like a chef who hears a craving and knows what to type into AllRecipes — NOT a literal copy of their sentence.
 
+The input may be compound: a list of ideas, styles, or examples separated by periods, commas, or "or" (e.g. "Something like mexican. Something spicy, like chili, or tacos, or gumbo.").
+
 Output ONLY valid JSON:
 {
   "search_mode": "dish|protein|ingredient|flavor|mood|general",
   "dish_anchor": "taco|chili|pasta|pizza|burger|curry|stir_fry|soup|salad|null",
-  "dish_queries": ["short dish names only if user named a dish"],
+  "dish_queries": ["short dish names or styles mentioned, e.g. chili, tacos, gumbo, mexican spicy stew"],
   "protein": "chicken|beef|...|null",
   "protein_query": "protein word only or null",
   "ingredients": ["lime", "garlic", "cheese", ...],
@@ -29,8 +31,8 @@ Output ONLY valid JSON:
   "flavors": ["spicy", "cheesy", "lemony", "crispy", ...],
   "cuisine": "mexican|italian|null",
   "mood": "light|comfort|crispy|null",
-  "main_query": "2-4 word summary for search e.g. lemony fish, cheesy comfort",
-  "search_terms": []
+  "main_query": "2-4 word summary for search e.g. spicy mexican chili",
+  "search_terms": ["chili", "tacos", "gumbo", "mexican spicy", "spicy chili", "taco gumbo", ... many short targeted queries covering ALL ideas mentioned]
 }
 
 RULES:
@@ -38,11 +40,15 @@ RULES:
 2. "cheesy" / "warm and cheesy" → flavors=[cheesy], ingredients may include cheese, mood=comfort.
 3. "light lemony fish" → protein=fish, flavors=[light, lemony], ingredients=[lemon], mood=light.
 4. "comfort food for a cold night" → mood=comfort, no protein unless stated — main_query=comfort food.
-5. dish_queries ONLY when user names a dish. If they say tacos, dish_queries may include taco (+ close adjacents).
-   NEVER add taco/burrito/street food unless user mentioned them.
+5. For compound inputs listing multiple styles (mexican, chili, tacos, gumbo, spicy etc.): 
+   - Set cuisine if mexican/italian etc. mentioned.
+   - flavors for spicy/hot etc.
+   - dish_queries and especially search_terms MUST include entries for EACH mentioned idea (chili, tacos, gumbo, mexican spicy stew, spicy chili tacos, etc.) plus logical combinations.
+   - dish_anchor can be the strongest single one or null; do not limit to one.
 6. ingredients[] = real foods. flavors[] = taste/texture words (cheesy, crispy, smoky).
 7. protein = explicit only; null if not stated.
-8. main_query = the distilled search intent in 2-4 words — never the full sentence.
+8. main_query = the distilled overall search intent in 2-4 words.
+9. search_terms: always produce a rich list (8-15 items) of short, effective AllRecipes-style queries that together cover every part of the user's list of ideas. Include direct mentions + protein/flavor/cuisine combos + fusions.
 """
 
 PROTEINS = (

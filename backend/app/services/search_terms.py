@@ -16,7 +16,9 @@ _STOP = frozenset({
 
 
 def collect_search_terms(parsed: dict[str, Any], what_sounds_good: str) -> list[str]:
-    """Many queries → many preparations (taco styles, chili variations, etc.)."""
+    """Many queries → many preparations for compound cravings.
+    For inputs like 'mexican. spicy like chili or tacos or gumbo', produce terms
+    for each idea + combinations so we can surface chili, tacos, gumbo, and fusions."""
     text = (what_sounds_good or "").strip()
     lower = text.lower()
     terms: list[str] = []
@@ -31,13 +33,13 @@ def collect_search_terms(parsed: dict[str, Any], what_sounds_good: str) -> list[
     add(text)
     add(parsed.get("main_query") or "")
 
-    anchor, dish_queries = detect_dish_anchor(text)
-    if not parsed.get("dish_queries") and dish_queries:
-        parsed_dish = dish_queries
-    else:
-        parsed_dish = list(parsed.get("dish_queries") or [])
+    # Support multiple dish ideas from parser (compound fix)
+    parsed_dish = list(parsed.get("dish_queries") or [])
+    anchor, _ = detect_dish_anchor(text)
+    if anchor and anchor not in [d.lower() for d in parsed_dish]:
+        parsed_dish.append(anchor)
 
-    for dq in parsed_dish:
+    for dq in parsed_dish[:8]:
         add(dq)
 
     protein = (parsed.get("protein") or "").strip()
@@ -48,34 +50,43 @@ def collect_search_terms(parsed: dict[str, Any], what_sounds_good: str) -> list[
 
     if "ground beef" in lower or "groundbeef" in lower.replace(" ", ""):
         add("ground beef")
-        for extra in ("tacos", "chili", "burrito", "nachos", "spicy"):
+        for extra in ("tacos", "chili", "burrito", "nachos", "spicy", "gumbo"):
             if extra in lower or parsed_dish:
                 add(f"ground beef {extra}")
 
     for flavor in parsed.get("flavors") or []:
         if protein:
             add(f"{protein} {flavor}")
-        add(f"{flavor} {parsed_dish[0]}" if parsed_dish else flavor)
+        for dq in parsed_dish[:3]:
+            add(f"{flavor} {dq}")
+        add(flavor)
 
     for ing in (parsed.get("ingredients") or [])[:4]:
         if protein:
             add(f"{protein} {ing}")
 
     words = [w for w in re.findall(r"[a-z]{3,}", lower) if w not in _STOP]
-    for w in words[:6]:
+    for w in words[:8]:
         add(w)
 
-    if anchor == "taco":
-        for prep in (
-            "fish taco", "chicken taco", "beef taco", "carnitas", "al pastor",
-            "street tacos", "birria tacos", "breakfast tacos",
-        ):
+    # Explicit expansion for common compound anchors mentioned
+    if any(x in lower for x in ("taco", "tacos")) or "taco" in [d.lower() for d in parsed_dish]:
+        for prep in ("taco", "tacos", "fish taco", "chicken taco", "beef taco", "spicy taco", "mexican taco"):
             add(prep)
-    elif anchor == "chili":
-        for prep in (
-            "beef chili", "turkey chili", "vegetarian chili", "white chicken chili",
-            "texas chili", "slow cooker chili",
-        ):
+    if any(x in lower for x in ("chili", "chilli")) or "chili" in [d.lower() for d in parsed_dish]:
+        for prep in ("chili", "beef chili", "turkey chili", "white chicken chili", "vegetarian chili", "spicy chili", "texas chili"):
+            add(prep)
+    if "gumbo" in lower or "gumbo" in [d.lower() for d in parsed_dish]:
+        for prep in ("gumbo", "chicken gumbo", "shrimp gumbo", "spicy gumbo", "cajun gumbo"):
+            add(prep)
+    if "mexican" in lower or parsed.get("cuisine") == "mexican":
+        for prep in ("mexican", "mexican spicy", "mexican chili", "mexican stew", "spicy mexican"):
             add(prep)
 
-    return terms[:18]
+    # Add combinations for "things that combine them all"
+    if len(parsed_dish) >= 2:
+        for i in range(min(3, len(parsed_dish))):
+            for j in range(i+1, min(4, len(parsed_dish))):
+                add(f"{parsed_dish[i]} {parsed_dish[j]}")
+
+    return terms[:20]

@@ -80,7 +80,7 @@ def _search_queries(plan: dict[str, Any]) -> list[str]:
 
     for term in plan.get("search_queries") or plan.get("search_terms") or []:
         add(str(term))
-    return queries[:10]
+    return queries[:15]  # more queries for compound inputs to pull diverse chili/taco/gumbo + fusion candidates
 
 
 def _title_matches_craving(
