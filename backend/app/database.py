@@ -34,3 +34,16 @@ async def init_db() -> None:
             )
         except Exception:
             pass
+        for col, default in [
+            ("flavor_profile_json", "'{}'"),
+            ("craving_history_json", "'[]'"),
+        ]:
+            try:
+                await conn.execute(
+                    text(
+                        f"ALTER TABLE user_preferences "
+                        f"ADD COLUMN {col} TEXT DEFAULT {default}"
+                    )
+                )
+            except Exception:
+                pass  # column exists or other error, tolerant for sqlite dev/prod
