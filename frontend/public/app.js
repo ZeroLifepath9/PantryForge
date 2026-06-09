@@ -647,26 +647,32 @@ function renderCravingResults(data, opts = {}) {
   const list = $("recipes-list");
   const spotsContainer = $("local-spots");
 
-  if (!total) {
-    list.innerHTML = `<p class="hint">No matches. Try different keywords or loosen diet filters.</p>`;
-    updateSelectionUI();
-    if (spotsContainer) spotsContainer.innerHTML = `<p class="hint" style="font-size:0.8rem;">No local matches for this search.</p>`;
-    return;
-  }
-
   // New layout: local spots first (top, matching user profile), then 5x5 recipe tokens
   renderLocalSpotsProfileBased(recipes, parsed, spotsContainer);  // spots based on full flavor profile from current + past
 
-  // Render up to 25 recipe tokens in 5-wide grid. Fill with accent sides if needed.
+  // Render up to 25 recipe tokens in 5-wide grid. Always fill with accent sides if backend gave fewer (or 0).
+  // This ensures results even if main curation is strict.
   const maxRecipes = 25;
-  let displayRecipes = recipes.slice(0, maxRecipes);
+  let displayRecipes = (recipes || []).slice(0, maxRecipes);
   if (displayRecipes.length < maxRecipes) {
-    // Fill with accent sides/appetizers that match flavor (simple mock for demo; backend should provide more)
-    const accents = generateAccentTokens(parsed, maxRecipes - displayRecipes.length);
+    const needed = maxRecipes - displayRecipes.length;
+    const accents = generateAccentTokens(parsed, needed);
     displayRecipes = displayRecipes.concat(accents);
+  }
+  if (displayRecipes.length === 0) {
+    // ultimate fallback accents
+    displayRecipes = generateAccentTokens(parsed, maxRecipes);
   }
   list.innerHTML = displayRecipes.map((r, idx) => renderRecipeToken(r, idx)).join("");
   bindRecipeTokens(list, displayRecipes);
+
+  // Update message if few real recipes
+  const realCount = (recipes || []).length;
+  if (realCount === 0) {
+    if ($("results-message")) $("results-message").textContent = "Showing flavor-profile matching accents/sides (no exact mains found this time; try broadening).";
+  } else if (realCount < 25) {
+    if ($("results-message")) $("results-message").textContent = `${realCount} main matches + accents to fill 25.`;
+  }
 
   updateSelectionUI();
   // Hide old selection-detail for now; new detail is in showRecipeDetail

@@ -25,9 +25,9 @@ The home cook described a *flavor profile* using the current input + their past 
 
 Current input example flavor: tacos or chili or gumbo, something spicy or Mexican like. What they have in common: bold spicy heat, savory depth, Mexican/Tex-Mex/Cajun vibes (cumin, chili powder, peppers, onions, garlic, tomatoes, hearty, often with meat/beans/rice, tangy/acidic finishes). The profile is spicy, bold, comforting, flavorful stew-like or spiced meat dishes.
 
-Your job: curate a rich, expanded *array of exactly 25 options* (mains + accents) **inspired by the common derived flavor profile** (spicy Mexican-like with chili/gumbo/taco elements). Explicitly include recipes inspired by tacos (spiced taco meat, fillings, bowls), chili (hearty stews), gumbo (spicy roux-like stews), and similar (fajitas, enchiladas, jambalaya, spicy beans, etc.). Also include side dishes, dips, appetizers, accents that perfectly match and enhance the flavor profile (e.g. cornbread, slaw, rice, guac, salsa, remoulade, beans, etc.).
+Your job: curate a rich, expanded *array of up to 25 options* (mains + accents) **inspired by the common derived flavor profile** (spicy Mexican-like with chili/gumbo/taco elements). Explicitly include recipes inspired by tacos (spiced taco meat, fillings, bowls), chili (hearty stews), gumbo (spicy roux-like stews), and similar (fajitas, enchiladas, jambalaya, spicy beans, etc.). Also include side dishes, dips, appetizers, accents that perfectly match and enhance the flavor profile (e.g. cornbread, slaw, rice, guac, salsa, remoulade, beans, etc.).
 
-The array must cover all mentioned (tacos, chili, gumbo) plus the common profile - NOT just chili. Give 5x5 grid of variety: different preps of the profile.
+The array must cover all mentioned (tacos, chili, gumbo) plus the common profile - NOT just chili. Aim for 25 to fill the 5x5 grid with variety in preps of the profile; if fewer perfect matches, include strong accents/sides that share the flavor.
 
 Priorities (in order):
 1. Protein-forward where applicable: mains feature the protein as star.
@@ -50,7 +50,7 @@ Output ONLY valid JSON:
 }
 
 RULES:
-- Exactly 25 picks for 5-wide x 5-deep. Must include distinct options inspired by tacos, by chili, by gumbo, plus the common profile. Fill with accent sides/dips/appetizers that accent the exact flavor (not random).
+- Up to 25 picks for 5-wide x 5-deep grid. Must include distinct options inspired by tacos, by chili, by gumbo, plus the common profile. Fill with accent sides/dips/appetizers that accent the exact flavor (not random).
 - URLs from list only.
 - Reject unrelated. Every must match the spicy/Mexican-like profile from the input.
 - Do not over-represent only chili. Balanced coverage of all.
@@ -357,7 +357,7 @@ async def search_craving_lineup(
                 if stored:
                     lineup.insert(0, stored)
 
-    # Fill to exactly 25 with profile-matching accents/sides/dips/appetizers if needed (for 5x5 grid)
+    # Fill to 25 with profile-matching accents/sides/dips/appetizers if needed (for 5x5 grid)
     if len(lineup) < PAGE_SIZE:
         for card in cards:
             if len(lineup) >= PAGE_SIZE:
@@ -371,6 +371,20 @@ async def search_craving_lineup(
                 card["fit_note"] = card.get("fit_note") or "Accent/side that enhances the spicy Mexican/gumbo/chili/taco flavor profile"
                 card["thread_label"] = card.get("thread_label") or "Flavor Accent"
                 lineup.append(card)
+
+    lineup = lineup[:PAGE_SIZE]
+
+    # Safety net: if still very few (e.g. strict filtering), take top from hits to ensure results
+    if len(lineup) < 5:
+        for card in hits[:PAGE_SIZE]:
+            if len(lineup) >= PAGE_SIZE:
+                break
+            if card not in lineup:  # rough dedup
+                title = card.get("title") or ""
+                if _is_main_title(title) or any(kw in (title or "").lower() for kw in ["chili","taco","gumbo","spicy","mexican"]):
+                    card["fit_note"] = card.get("fit_note") or "Matches your spicy Mexican-like profile (tacos/chili/gumbo elements)"
+                    card["thread_label"] = card.get("thread_label") or "Profile Match"
+                    lineup.append(card)
 
     lineup = lineup[:PAGE_SIZE]
     put_many(lineup)
