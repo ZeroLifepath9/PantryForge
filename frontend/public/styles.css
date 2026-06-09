@@ -1774,21 +1774,24 @@ textarea { resize: vertical; min-height: 5rem; }
   color: var(--green);
 }
 
-/* Local spots listed first, compact list */
+/* Local spots side by side, top 5 matches (horizontal row) */
 .local-spots-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: row;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
 }
 .local-spots-list .spot-card {
-  flex: 1 1 200px;
-  max-width: 250px;
+  flex: 0 0 18%;
+  min-width: 140px;
   padding: 0.4rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #f8f9f8;
   cursor: pointer;
+  font-size: 0.75rem;
 }
 
 /* Detail tab styles for the 3 tokens */

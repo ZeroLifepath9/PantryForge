@@ -1285,18 +1285,28 @@ function generateAccentTokens(parsed, count) {
 
 function renderLocalSpotsProfileBased(recipes, parsed, container) {
   if (!container) return;
-  const profile = parsed.flavor_profile || parsed.main_query || "spicy mexican";
-  // Filter/adapt the existing LOCAL_SPOTS (from previous) or mock new ones based on profile
-  const relevantSpots = (window.LOCAL_SPOTS || [
-    {id:1, name:"Olive & Thyme", cuisine:"Mediterranean", distance:"1.4 mi", rating:4.7, image:"https://picsum.photos/id/160/80/80", address:"Northwood, OH", menu:[{name:"Herb Grilled Chicken", price:"$14.50", why:"Matches spicy herb profile"}]},
-    {id:2, name:"Green Bowl Asian", cuisine:"Asian Fusion", distance:"2.8 mi", rating:4.5, image:"https://picsum.photos/id/201/80/80", address:"Northwood area", menu:[{name:"Ginger Spicy Stir", price:"$13", why:"Spicy depth like gumbo/chili"}]},
-    {id:3, name:"Taco & Chili Cantina", cuisine:"Mexican", distance:"0.9 mi", rating:4.3, image:"https://picsum.photos/id/251/80/80", address:"Northwood, OH", menu:[{name:"Spicy Gumbo Tacos", price:"$11", why:"Fusion of all your flavors"}]},
-  ]).filter(s => s.cuisine.toLowerCase().includes("mex") || s.cuisine.toLowerCase().includes("asian") || profile.toLowerCase().includes("spicy"));
+  const profile = (parsed.flavor_profile || parsed.main_query || "spicy mexican").toLowerCase();
+  // Mock top 5 spots matching the common spicy Mexican/gumbo/chili/taco profile (bold, spicy, savory, hearty)
+  const allSpots = [
+    {id:1, name:"Taco & Chili Cantina", cuisine:"Mexican", distance:"0.9 mi", rating:4.3, image:"https://picsum.photos/id/251/80/80", address:"Northwood, OH", menu:[{name:"Spicy Gumbo Tacos", price:"$11", why:"Fusion of tacos, chili, gumbo spice"}]},
+    {id:2, name:"Gumbo & Spice House", cuisine:"Cajun/Mexican", distance:"1.8 mi", rating:4.4, image:"https://picsum.photos/id/106/80/80", address:"Northwood area", menu:[{name:"Chili Gumbo Bowl", price:"$12", why:"Spicy stew profile match"}]},
+    {id:3, name:"Spicy Taco Spot", cuisine:"Mexican", distance:"0.6 mi", rating:4.5, image:"https://picsum.photos/id/160/80/80", address:"Northwood, OH", menu:[{name:"Loaded Tacos", price:"$10", why:"Taco element of profile"}]},
+    {id:4, name:"Bold Chili Grill", cuisine:"Tex-Mex", distance:"2.1 mi", rating:4.2, image:"https://picsum.photos/id/201/80/80", address:"Nearby", menu:[{name:"Hearty Chili", price:"$9", why:"Chili core of input"}]},
+    {id:5, name:"Mexican Heat Kitchen", cuisine:"Mexican Fusion", distance:"1.2 mi", rating:4.6, image:"https://picsum.photos/id/312/80/80", address:"Northwood", OH, menu:[{name:"Spicy Mexican Gumbo Tacos", price:"$13", why:"All elements combined"}]},
+  ];
+  // Rank by profile match (simple keyword overlap with input/profile)
+  const scored = allSpots.map(s => {
+    const score = (profile.includes("mex") && s.cuisine.toLowerCase().includes("mex") ? 3 : 0) +
+                  (profile.includes("spicy") ? 2 : 0) +
+                  (s.cuisine.toLowerCase().includes("cajun") || s.cuisine.toLowerCase().includes("tex") ? 1 : 0);
+    return {...s, score};
+  }).sort((a,b) => b.score - a.score);
+  const top5 = scored.slice(0,5);
 
-  container.innerHTML = relevantSpots.map(spot => `
+  container.innerHTML = top5.map(spot => `
     <div class="spot-card" data-spot-id="${spot.id}">
       <img src="${escapeHtml(spot.image)}" alt="">
-      <div><strong>${escapeHtml(spot.name)}</strong><br><small>${escapeHtml(spot.distance)} • ${spot.rating}★ • ${escapeHtml(spot.cuisine)}</small></div>
+      <div><strong>${escapeHtml(spot.name)}</strong><br><small>${escapeHtml(spot.distance)} • ${spot.rating}★</small></div>
     </div>
   `).join("");
 
@@ -1304,8 +1314,8 @@ function renderLocalSpotsProfileBased(recipes, parsed, container) {
   container.querySelectorAll(".spot-card").forEach(card => {
     card.addEventListener("click", () => {
       const sid = card.dataset.spotId;
-      const spot = relevantSpots.find(s => s.id == sid);
-      if (spot) showSpotDetailInline(spot, profile, container);  // reuse/adapt previous inline
+      const spot = top5.find(s => s.id == sid);
+      if (spot) showSpotDetailInline(spot, profile, container);
     });
   });
 }

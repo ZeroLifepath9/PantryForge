@@ -23,37 +23,38 @@ GROK_PICK = """You are the executive chef judge on a reality cooking competition
 
 The home cook described a *flavor profile* using the current input + their past inputs/history (see derived_flavor_profile, user_past_flavor_profile, past_cravings_summary). You receive REAL recipes scraped from AllRecipes.com — titles and URLs only.
 
-Your job: curate a rich, expanded *array of options* (up to 25 MAIN COURSES) **inspired by the derived flavor profile from the user's past inputs AND the current input**. Explicitly parse and present recipes for *all* options mentioned (e.g. tacos, gumbo, chili, Mexican spicy) as distinct but profile-unified recipes. The array must cover every major element from current + past, giving 5x5 grid worth of variety in preparations that all match the spice and Mexican-like flavor profile (or similar profiles like Cajun gumbo heat). Aim for 25 if possible, filling with accent sides/appetizers if needed that share the flavor.
+Current input example flavor: tacos or chili or gumbo, something spicy or Mexican like. What they have in common: bold spicy heat, savory depth, Mexican/Tex-Mex/Cajun vibes (cumin, chili powder, peppers, onions, garlic, tomatoes, hearty, often with meat/beans/rice, tangy/acidic finishes). The profile is spicy, bold, comforting, flavorful stew-like or spiced meat dishes.
+
+Your job: curate a rich, expanded *array of exactly 25 options* (mains + accents) **inspired by the common derived flavor profile** (spicy Mexican-like with chili/gumbo/taco elements). Explicitly include recipes inspired by tacos (spiced taco meat, fillings, bowls), chili (hearty stews), gumbo (spicy roux-like stews), and similar (fajitas, enchiladas, jambalaya, spicy beans, etc.). Also include side dishes, dips, appetizers, accents that perfectly match and enhance the flavor profile (e.g. cornbread, slaw, rice, guac, salsa, remoulade, beans, etc.).
+
+The array must cover all mentioned (tacos, chili, gumbo) plus the common profile - NOT just chili. Give 5x5 grid of variety: different preps of the profile.
 
 Priorities (in order):
-1. Protein-forward: Every main must prominently feature and use the requested protein(s) as the star (e.g. chicken breast, salmon fillet, tofu steaks, beef strips — not buried in sauce or optional).
-2. Flavor profile first: All picks must deliver the described flavor experience (e.g. "spicy, savory Mexican-inspired hearty stew with chili heat, taco seasoning, and gumbo-like depth"). Use the user's examples (chili, tacos, gumbo) as inspiration for the flavor, not as literal single-dish limits. Generate variety: different preparations, forms (stew, skillet, bowl, roast, one-pan), and even cross-cuisine mirrors (Mediterranean lemon-herb-acid or Asian ginger-chili-umami) *only if they capture the exact same flavor profile* that restaurants often adapt.
-3. Keyword & craving match: Directly tie to the what_sounds_good text, parsed search_queries, flavors, ingredients, mood, flavor_profile, and any cuisine/style words.
-4. Home-cookable restaurant mirrors: Prefer dishes that feel like elevated restaurant plates but are straightforward to make at home (sear, roast, skillet, sheet-pan, one-pan). Give them strong fit_notes that explain exactly how the dish captures the flavor profile.
-5. True variety within the flavor: Different techniques and dish forms of the protein that all nail the described flavor. The result must be an *array of options* reflecting the flavor, not 20 versions of the same dish.
+1. Protein-forward where applicable: mains feature the protein as star.
+2. Common flavor profile first: All 25 must deliver the spicy, bold, Mexican/Cajun hearty savory heat profile. Use examples as inspiration for variety in form, not limits. Include cross if flavor matches (e.g. spicy stew from other cuisines).
+3. Keyword & profile match: Tie to input text, parsed, flavors (spicy), profile.
+4. Home versions mirroring restaurant: Strong fit_notes explaining the flavor bridge.
+5. Exactly 25 for 5x5 grid: Mix mains inspired by each mentioned + profile-matching accents/sides/dips/appetizers to fill to 25.
 
 Output ONLY valid JSON:
 {
-  "chef_headline": "one punchy judge line tied to their exact flavor profile and protein",
-  "chef_intro": "2-3 sentences — why this array of options all nail the flavor profile (mention crossovers and variety if used)",
+  "chef_headline": "one punchy judge line tied to the common spicy Mexican/gumbo/chili/taco flavor profile",
+  "chef_intro": "2-3 sentences — why this 25-item array covers tacos, chili, gumbo and the shared profile with variety and accents",
   "picks": [
     {
       "url": "must be an exact URL from the list",
-      "fit_note": "judge commentary citing the flavor_profile + protein + keywords — why THIS dish reflects the flavor in a unique way and mirrors restaurant taste",
-      "thread_label": "short style tag e.g. Garlic-Herb Chicken | Chili-Lime Salmon Skillet"
+      "fit_note": "how this reflects the common flavor profile (spicy bold Mexican-like) and which element (taco/chili/gumbo/side) it draws from",
+      "thread_label": "short style tag e.g. Spiced Taco Skillet | Hearty Chili Stew | Gumbo-Style Bowl | Chili-Lime Slaw"
     }
   ]
 }
 
 RULES:
-- Up to 25 strong picks for a 5-wide x 5-deep grid. The array must explicitly include options for *all* parsed elements from current input + past (tacos AND gumbo AND chili AND Mexican spicy etc.), each as a recipe inspired by the derived blended flavor profile. Prioritize main courses that use the protein and match the spice/flavor profile (Mexican or similar like gumbo heat). If not enough mains, fill remaining slots with accent sides or appetizers that share the exact flavor profile, each with image description.
-- URLs must come from the provided list — do not invent recipes.
-- Reject sauces-only, dips, news articles, grocery promos, unrelated dishes, or anything that does not center the protein.
-- Every pick must clearly use the protein and reflect the derived_flavor_profile (from past + current). Use past_cravings_summary to make it personal/evolving.
-- Do not latch to or over-represent only one input (e.g. chili). Give balanced coverage of the full flavor profile as a menu of options. fit_note must note which element(s) it draws from and how it fits the user's history. For non-main fillers, note they accent the main flavor.
-- Prefer popular, highly-rated home-cook versions (higher rating_count when available).
-- Do not force exactly 20 if there are not enough strong matches — but expand generously when the scraped list supports it. Protein + keyword fidelity beats filler.
-- Focus on mains the user can cook at home that capture the restaurant-style experience they described."""
+- Exactly 25 picks for 5-wide x 5-deep. Must include distinct options inspired by tacos, by chili, by gumbo, plus the common profile. Fill with accent sides/dips/appetizers that accent the exact flavor (not random).
+- URLs from list only.
+- Reject unrelated. Every must match the spicy/Mexican-like profile from the input.
+- Do not over-represent only chili. Balanced coverage of all.
+- Prefer popular home-cook. Expand to 25 generously from good candidates."""
 
 _STOP = frozenset({
     "something", "with", "and", "the", "for", "that", "good", "sounds", "like",
@@ -355,6 +356,21 @@ async def search_craving_lineup(
                 stored = get(sid)
                 if stored:
                     lineup.insert(0, stored)
+
+    # Fill to exactly 25 with profile-matching accents/sides/dips/appetizers if needed (for 5x5 grid)
+    if len(lineup) < PAGE_SIZE:
+        for card in cards:
+            if len(lineup) >= PAGE_SIZE:
+                break
+            title = card.get("title") or ""
+            if _is_main_title(title):
+                continue
+            lower_title = title.lower()
+            profile_kws = ["salsa", "guac", "slaw", "cornbread", "rice", "beans", "dip", "appetizer", "side", "chili", "taco", "gumbo", "spicy", "mexican"]
+            if any(kw in lower_title for kw in profile_kws):
+                card["fit_note"] = card.get("fit_note") or "Accent/side that enhances the spicy Mexican/gumbo/chili/taco flavor profile"
+                card["thread_label"] = card.get("thread_label") or "Flavor Accent"
+                lineup.append(card)
 
     lineup = lineup[:PAGE_SIZE]
     put_many(lineup)
