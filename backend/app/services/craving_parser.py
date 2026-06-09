@@ -17,7 +17,9 @@ from app.services.xai_client import chat_completion
 PARSER_SYSTEM = """You translate what a home cook says into structured recipe-search criteria.
 Think like a chef who hears a craving and knows what to type into AllRecipes — NOT a literal copy of their sentence.
 
-The input may be compound: a list of ideas, styles, or examples separated by periods, commas, or "or" (e.g. "Something like mexican. Something spicy, like chili, or tacos, or gumbo.").
+The input may be compound: a list of ideas, styles, or examples separated by periods, commas, or "or" (e.g. "Something like mexican. Something spicy, like chili, or tacos, or gumbo."). 
+
+Focus on the *flavor profile* the user is describing (taste, texture, vibe, heat level, savoriness, brightness, etc.), not latching to a single dish name. The goal is to find many different mains that all deliver the same flavor experience in varied forms.
 
 Output ONLY valid JSON:
 {
@@ -31,8 +33,9 @@ Output ONLY valid JSON:
   "flavors": ["spicy", "cheesy", "lemony", "crispy", ...],
   "cuisine": "mexican|italian|null",
   "mood": "light|comfort|crispy|null",
+  "flavor_profile": "short description of the overall flavor experience, e.g. 'spicy, savory, Mexican-inspired hearty stew with chili heat, taco seasoning vibes, and gumbo-like depth'",
   "main_query": "2-4 word summary for search e.g. spicy mexican chili",
-  "search_terms": ["chili", "tacos", "gumbo", "mexican spicy", "spicy chili", "taco gumbo", ... many short targeted queries covering ALL ideas mentioned]
+  "search_terms": ["chili", "tacos", "gumbo", "mexican spicy", "spicy chili", "taco gumbo", ... many short targeted queries covering the flavor profile in different forms"]
 }
 
 RULES:
@@ -41,14 +44,16 @@ RULES:
 3. "light lemony fish" → protein=fish, flavors=[light, lemony], ingredients=[lemon], mood=light.
 4. "comfort food for a cold night" → mood=comfort, no protein unless stated — main_query=comfort food.
 5. For compound inputs listing multiple styles (mexican, chili, tacos, gumbo, spicy etc.): 
+   - Identify the unifying *flavor profile* (spicy + savory + Mexican/Cajun stew elements).
    - Set cuisine if mexican/italian etc. mentioned.
    - flavors for spicy/hot etc.
-   - dish_queries and especially search_terms MUST include entries for EACH mentioned idea (chili, tacos, gumbo, mexican spicy stew, spicy chili tacos, etc.) plus logical combinations.
-   - dish_anchor can be the strongest single one or null; do not limit to one.
+   - dish_queries and especially search_terms MUST include entries for EACH mentioned idea PLUS many variations that capture the same flavor profile in different preparations (spicy mexican stew, chili con carne, taco skillet, gumbo style, etc.).
+   - dish_anchor can be the strongest single one or null; prefer "flavor" mode for compound flavor descriptions.
 6. ingredients[] = real foods. flavors[] = taste/texture words (cheesy, crispy, smoky).
 7. protein = explicit only; null if not stated.
-8. main_query = the distilled overall search intent in 2-4 words.
-9. search_terms: always produce a rich list (8-15 items) of short, effective AllRecipes-style queries that together cover every part of the user's list of ideas. Include direct mentions + protein/flavor/cuisine combos + fusions.
+8. main_query = the distilled overall flavor-focused search intent in 2-4 words.
+9. flavor_profile: always provide a concise chef-style description of the desired taste experience.
+10. search_terms: always produce a rich list (10-20 items) of short, effective AllRecipes-style queries that together cover the flavor profile from many angles. Include direct mentions + flavor/cuisine/protein combos + fusions. Do NOT collapse to one dish.
 """
 
 PROTEINS = (
@@ -153,6 +158,7 @@ def _normalize_parsed(raw: dict[str, Any], original: str) -> dict[str, Any]:
         "flavors": flavors,
         "cuisine": cuisine,
         "mood": mood,
+        "flavor_profile": raw.get("flavor_profile") or "",
         "main_query": main_query,
         "pairing_queries": [],
         "search_terms": list(dict.fromkeys(search_terms)),
@@ -255,6 +261,21 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
         main_bits = [w for w in re.findall(r"[a-z]{4,}", lower) if w not in _STOP][:2]
     main_query = " ".join(main_bits[:4]) or text.strip()[:40]
 
+    # Generate flavor_profile for compound flavor descriptions (key for "reflects the flavor" array of options)
+    flavor_profile = ""
+    if "mexican" in lower or cuisine == "mexican":
+        flavor_profile = "spicy, savory Mexican-inspired"
+    if any(x in lower for x in ("spicy", "chili", "hot")):
+        flavor_profile += " with bold heat and depth"
+    if any(x in lower for x in ("chili", "gumbo", "stew")):
+        flavor_profile += ", hearty stew-like"
+    if any(x in lower for x in ("taco", "tacos")):
+        flavor_profile += ", taco-seasoned"
+    if flavor_profile:
+        flavor_profile = flavor_profile.strip(", ") + " flavor profile"
+    else:
+        flavor_profile = " ".join(main_bits[:4]) + " flavor profile"
+
     result = {
         "search_mode": search_mode,
         "dish_anchor": dish_anchor,
@@ -266,6 +287,7 @@ def mock_parse_craving(text: str) -> dict[str, Any]:
         "flavors": flavors,
         "cuisine": cuisine,
         "mood": mood,
+        "flavor_profile": flavor_profile,
         "main_query": main_query,
         "pairing_queries": [],
         "search_terms": [],

@@ -60,11 +60,23 @@ def build_search_queries(parsed: dict[str, Any], what_sounds_good: str) -> list[
     mood = parsed.get("mood")
     cuisine = parsed.get("cuisine")
     dish_anchor = parsed.get("dish_anchor")
+    flavor_profile = (parsed.get("flavor_profile") or "").strip()
 
     for flavor in flavors:
         mapped = _FLAVOR_TO_INGREDIENT.get(flavor)
         if mapped and mapped not in ingredients:
             ingredients.append(mapped)
+
+    # Core: always prioritize the flavor_profile to generate an *array of options* that all reflect the same flavor
+    # (e.g. spicy Mexican chili/taco/gumbo vibe → many different mains that taste like that profile)
+    if flavor_profile:
+        add(flavor_profile)
+        if protein:
+            add(f"{protein} {flavor_profile}")
+        for flavor in flavors[:3]:
+            add(f"{flavor} {flavor_profile}")
+        if cuisine:
+            add(f"{cuisine} {flavor_profile}")
 
     # Core expansion for EVERY dish idea / style mentioned in compound input
     # (this is the key fix for "chili or tacos or gumbo" etc.)
@@ -168,12 +180,20 @@ def build_search_queries(parsed: dict[str, Any], what_sounds_good: str) -> list[
         if cuisine and flavors:
             add(f"{cuisine} {' '.join(flavors[:2])}")
 
+    # Always add flavor_profile driven queries for a true "array of options that reflects the flavor"
+    if flavor_profile:
+        add(flavor_profile)
+        if protein:
+            add(f"{protein} {flavor_profile}")
+        for f in flavors[:2]:
+            add(f"{f} {flavor_profile}")
+
     # Final dedup + limit (higher to support 15-25 results)
     deduped = []
     for q in out:
         if q.lower() not in {d.lower() for d in deduped}:
             deduped.append(q)
-    return deduped[:18]
+    return deduped[:20]
 
 
 def build_match_keywords(parsed: dict[str, Any], what_sounds_good: str) -> list[str]:
@@ -280,6 +300,7 @@ async def translate_craving(
         "chef_headline": _chef_headline(parsed, text),
         "chef_intro": _chef_intro(parsed, text),
         "what_sounds_good": text,
+        "flavor_profile": parsed.get("flavor_profile", ""),
         "craving_threads": [{
             "label": (parsed.get("main_query") or text[:40]).title(),
             "search_terms": queries,
