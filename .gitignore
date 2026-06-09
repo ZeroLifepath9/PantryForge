@@ -11,3 +11,7 @@ backend/.env
 .env
 *.pyc
 .DS_Store
+
+# Ad-hoc/dev test scripts (not shipped with the app; exploratory only)
+backend/scripts/test_search_fallbacks.py
+backend/scripts/test_sources.py

@@ -17,7 +17,7 @@ services:
       - key: RENDER
         value: "true"
       - key: USE_MOCK_DATA
-        value: "false"
+        value: "true"
       - key: APP_VERSION
         value: "20250608-grok-ar"
       - key: XAI_API_KEY
