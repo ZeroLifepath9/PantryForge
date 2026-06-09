@@ -1717,6 +1717,130 @@ textarea { resize: vertical; min-height: 5rem; }
   }
 }
 
+/* New 5x5 recipe token grid for flavor profile results */
+.recipe-token-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.recipe-token {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  font-size: 0.8rem;
+}
+.recipe-token:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.recipe-token img {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+}
+.recipe-token .token-body {
+  padding: 0.4rem;
+}
+.recipe-token .token-name {
+  font-weight: 600;
+  line-height: 1.1;
+  margin-bottom: 0.2rem;
+}
+.recipe-token .token-hover {
+  display: none;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(255,255,255,0.95);
+  padding: 0.4rem;
+  font-size: 0.7rem;
+  overflow: auto;
+  z-index: 10;
+}
+.recipe-token:hover .token-hover {
+  display: block;
+}
+.token-hover ul {
+  margin: 0.2rem 0;
+  padding-left: 1rem;
+}
+.token-hover .complexity {
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* Local spots listed first, compact list */
+.local-spots-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.local-spots-list .spot-card {
+  flex: 1 1 200px;
+  max-width: 250px;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f8f9f8;
+  cursor: pointer;
+}
+
+/* Detail tab styles for the 3 tokens */
+.detail-tab-container {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #fff;
+}
+.detail-tokens {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.detail-token {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: center;
+  cursor: pointer;
+  background: #f0f7f4;
+}
+.detail-token.active {
+  background: var(--green);
+  color: #fff;
+}
+.detail-content {
+  min-height: 200px;
+}
+.shopping-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.2rem 0;
+}
+.shopping-checklist input {
+  accent-color: var(--green);
+}
+.meal-sides-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.3rem;
+}
+.inspired-full {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.inspired-full h4 {
+  margin: 0.5rem 0 0.2rem;
+}
+
 /* ForgePlate-inspired split results layout (applied to existing results) */
 .forge-results-split {
   display: flex;

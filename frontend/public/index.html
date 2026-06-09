@@ -129,18 +129,18 @@
           <button type="button" id="close-results-tab" class="tab-close" aria-label="Close results and return to search">×</button>
         </div>
         <div id="parsed-craving" class="parsed-chips parsed-chips-inline hidden"></div>
-        <!-- Forge Your Version / Local Spots split layout applied to results (60/40 desktop, stacked mobile).
-             Uses the improved recipe results on the left. Local spots matched to recipe styles/cuisines on the right.
-             Details shown inline (no new tabs beyond the main "What sounds good?" flow). -->
-        <div class="forge-results-split">
-          <div class="forge-left">
-            <div class="forge-section-title">Forge Your Version — Recipes (expanded 15-25 chef-curated mains)</div>
-            <div id="recipes-list" class="meal-card-grid meal-card-grid-fullpage"></div>
-          </div>
-          <div class="forge-right">
-            <div class="forge-section-title">Local Spots</div>
-            <div id="local-spots"></div>
-          </div>
+        <!-- New layout: Local Spots (matching user input profile) listed first (top).
+             Then recipes in 5 wide x up to 5 deep grid (25 tokens).
+             Tokens: image, name. Hover: ingredients + complexity 1-10.
+             Click: opens in-page detail "tab" with 3 sub-tokens for shopping, meal builder, inspired.
+             All inspired by full flavor profile from current + past user inputs. -->
+        <div id="local-spots-section">
+          <div class="forge-section-title">Local Spots matching your flavor profile (first)</div>
+          <div id="local-spots" class="local-spots-list"></div>
+        </div>
+        <div id="recipes-section">
+          <div class="forge-section-title">Recipes matching the flavor profile (5x5 = up to 25 tokens)</div>
+          <div id="recipes-list" class="recipe-token-grid"></div>
         </div>
         <div id="selection-detail" class="selection-detail hidden" aria-live="polite">
           <div class="selection-detail-head">
