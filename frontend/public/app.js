@@ -18,6 +18,61 @@ let inspiredSetup = null;
 let pendingSubstitutions = [];
 let approvedSubs = [];
 let currentChefProposal = null;
+
+// Local Spots data (Northwood, OH area examples). Matched at render time to recipe styles/cuisines
+// from the improved backend results (AllRecipes + Grok curation). No external tabs for details.
+const LOCAL_SPOTS = [
+  {
+    id: 1,
+    name: "Olive & Thyme",
+    cuisine: "Mediterranean",
+    distance: "1.4 mi",
+    rating: 4.7,
+    image: "https://picsum.photos/id/160/80/80",
+    address: "Northwood, OH",
+    menu: [
+      { name: "Herb Grilled Chicken Plate", price: "$14.50", why: "High protein, lemon-oregano profile matches anti-inflammatory picks." },
+      { name: "Falafel Power Bowl (greens heavy)", price: "$12.75", why: "Plant-based fiber option that aligns with blood-sugar friendly results." },
+    ],
+  },
+  {
+    id: 2,
+    name: "Green Bowl Asian Fusion",
+    cuisine: "Asian Fusion",
+    distance: "2.8 mi",
+    rating: 4.5,
+    image: "https://picsum.photos/id/201/80/80",
+    address: "Northwood / Rossford area",
+    menu: [
+      { name: "Ginger Turkey & Veg Stir", price: "$13.25", why: "Clean ginger-garlic flavors mirror quick high-protein home versions." },
+      { name: "Sesame Salmon Bowl (light sauce)", price: "$15.75", why: "Omega-3 + veg heavy; great for inflammation-conscious filters." },
+    ],
+  },
+  {
+    id: 3,
+    name: "Harvest Cafe",
+    cuisine: "Mediterranean / Healthy American",
+    distance: "0.9 mi",
+    rating: 4.3,
+    image: "https://picsum.photos/id/251/80/80",
+    address: "Northwood, OH",
+    menu: [
+      { name: "Lemon Chicken Salad Plate", price: "$12.00", why: "Direct style match to many of the chef-curated mains and sides." },
+    ],
+  },
+  {
+    id: 4,
+    name: "Northwood Fresh Market Cafe",
+    cuisine: "Healthy American",
+    distance: "0.6 mi",
+    rating: 4.2,
+    image: "https://picsum.photos/id/318/80/80",
+    address: "Northwood, OH",
+    menu: [
+      { name: "Tuna Power Salad (no cheese)", price: "$9.95", why: "Budget-friendly, high-protein + bean option that fits fasting & macros." },
+    ],
+  },
+];
 let currentCookData = null;
 let pendingSaveRecipe = null;
 let guestSaveAuthMode = "register";
@@ -175,6 +230,8 @@ function closeResultsTab() {
   $("results-tab")?.classList.add("hidden");
   showResultsListPane();
   $("search-panel")?.classList.remove("hidden");
+  const spots = $("local-spots");
+  if (spots) spots.innerHTML = "";
 }
 
 function openResultsTab() {
@@ -592,6 +649,8 @@ function renderCravingResults(data, opts = {}) {
   if (!total) {
     list.innerHTML = `<p class="hint">No matches. Try different keywords or loosen diet filters.</p>`;
     updateSelectionUI();
+    const spots = $("local-spots");
+    if (spots) spots.innerHTML = `<p class="hint" style="font-size:0.8rem;">No local matches for this search.</p>`;
     return;
   }
 
@@ -599,7 +658,82 @@ function renderCravingResults(data, opts = {}) {
   bindMealCards(list);
   updateSelectionUI();
   renderSelectionDetail();
+  renderLocalSpots(recipes);  // apply Forge Your Version / Local Spots split framework to the (improved) results
   $("results-tab")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderLocalSpots(recipes) {
+  const container = $("local-spots");
+  if (!container) return;
+
+  if (!recipes || !recipes.length) {
+    container.innerHTML = `<p class="hint" style="font-size:0.8rem;">No local matches yet.</p>`;
+    return;
+  }
+
+  // Simple matching: use first recipe's category/title keywords to label relevance for spots
+  const top = recipes[0];
+  const topLabel = (top.title || top.category || "your picks").toString().slice(0, 40);
+
+  // Always show the 4 spots, but annotate with match info from current results
+  container.innerHTML = LOCAL_SPOTS.map((spot) => {
+    const matchText = spot.cuisine.toLowerCase().includes((top.category || "").toLowerCase()) ||
+                      top.title?.toLowerCase().includes(spot.cuisine.toLowerCase().split(" ")[0])
+      ? `Pairs with ${topLabel}`
+      : `Style match for ${topLabel}`;
+    return `
+      <div class="spot-card" data-spot-id="${spot.id}">
+        <img src="${escapeHtml(spot.image)}" alt="">
+        <div class="spot-body">
+          <div class="spot-name">${escapeHtml(spot.name)}</div>
+          <div class="spot-meta">${escapeHtml(spot.cuisine)} · ${escapeHtml(spot.distance)} · ★ ${spot.rating}</div>
+          <div class="spot-match">${escapeHtml(matchText)}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  // Click -> inline detail (no new tabs)
+  container.querySelectorAll(".spot-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const sid = Number(card.dataset.spotId);
+      const spot = LOCAL_SPOTS.find((s) => s.id === sid);
+      if (spot) showSpotDetailInline(spot, topLabel, container);
+    });
+  });
+}
+
+function showSpotDetailInline(spot, topLabel, container) {
+  const menuHtml = spot.menu.map((m) => `
+    <div class="menu-item">
+      <strong>${escapeHtml(m.name)}</strong> <span style="color:var(--muted);">${escapeHtml(m.price)}</span><br>
+      <span style="font-size:0.8rem;">${escapeHtml(m.why)}</span>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <div class="spot-detail">
+      <span class="spot-back" data-action="back">← Back to spots</span>
+      <h4>${escapeHtml(spot.name)}</h4>
+      <div class="spot-meta-line">${escapeHtml(spot.cuisine)} · ${escapeHtml(spot.distance)} · ★ ${spot.rating} · ${escapeHtml(spot.address)}</div>
+      <div class="menu-match">
+        <strong>Menu items that match your profile + ${escapeHtml(topLabel)}:</strong>
+        ${menuHtml}
+      </div>
+      <div class="actions-note">
+        Get Directions: search “${escapeHtml(spot.name)} ${escapeHtml(spot.address)}” in Google Maps (or use device location).<br>
+        Order: available via Uber Eats, DoorDash, Grubhub — search the name in those apps (you stay logged in on your device).
+      </div>
+    </div>
+  `;
+
+  const back = container.querySelector(".spot-back");
+  if (back) {
+    back.addEventListener("click", () => {
+      // re-render the list using current lastCraving
+      const recipes = normalizeRecipes(lastCraving || {});
+      renderLocalSpots(recipes);
+    });
+  }
 }
 
 function searchFilterPayload() {

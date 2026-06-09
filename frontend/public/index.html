@@ -129,7 +129,19 @@
           <button type="button" id="close-results-tab" class="tab-close" aria-label="Close results and return to search">×</button>
         </div>
         <div id="parsed-craving" class="parsed-chips parsed-chips-inline hidden"></div>
-        <div id="recipes-list" class="meal-card-grid meal-card-grid-fullpage"></div>
+        <!-- Forge Your Version / Local Spots split layout applied to results (60/40 desktop, stacked mobile).
+             Uses the improved recipe results on the left. Local spots matched to recipe styles/cuisines on the right.
+             Details shown inline (no new tabs beyond the main "What sounds good?" flow). -->
+        <div class="forge-results-split">
+          <div class="forge-left">
+            <div class="forge-section-title">Forge Your Version — Recipes</div>
+            <div id="recipes-list" class="meal-card-grid meal-card-grid-fullpage"></div>
+          </div>
+          <div class="forge-right">
+            <div class="forge-section-title">Local Spots</div>
+            <div id="local-spots"></div>
+          </div>
+        </div>
         <div id="selection-detail" class="selection-detail hidden" aria-live="polite">
           <div class="selection-detail-head">
             <h3 id="selection-detail-title">How to make it</h3>
