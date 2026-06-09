@@ -34,6 +34,8 @@ class UserPreferences(Base):
     explain_techniques: Mapped[bool] = mapped_column(Boolean, default=True)
     include_pantry_staples: Mapped[bool] = mapped_column(Boolean, default=True)
     pantry_staples_json: Mapped[str] = mapped_column(Text, default="[]")
+    flavor_profile_json: Mapped[str] = mapped_column(Text, default="{}")
+    craving_history_json: Mapped[str] = mapped_column(Text, default="[]")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
@@ -50,6 +52,18 @@ class UserPreferences(Base):
     def pantry_staples(self) -> list[str]:
         raw = json.loads(self.pantry_staples_json or "[]")
         return raw if raw else []
+
+    def flavor_profile(self) -> dict:
+        try:
+            return json.loads(self.flavor_profile_json or "{}")
+        except Exception:
+            return {}
+
+    def craving_history(self) -> list[dict]:
+        try:
+            return json.loads(self.craving_history_json or "[]")
+        except Exception:
+            return []
 
 
 class SavedRecipe(Base):

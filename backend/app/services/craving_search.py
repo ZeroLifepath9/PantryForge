@@ -18,6 +18,8 @@ async def search_by_craving(
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
     health_conditions: list[str] | None = None,
+    user_flavor_profile: dict | None = None,
+    craving_history: list[dict] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     return await run_chef_search(
         what_sounds_good,
@@ -29,4 +31,6 @@ async def search_by_craving(
         diets=diets,
         intolerances=intolerances,
         health_conditions=health_conditions,
+        user_flavor_profile=user_flavor_profile,
+        craving_history=craving_history,
     )

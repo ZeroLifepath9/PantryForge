@@ -25,6 +25,8 @@ def _to_response(prefs: UserPreferences) -> PreferencesResponse:
         explain_techniques=prefs.explain_techniques,
         include_pantry_staples=prefs.include_pantry_staples,
         pantry_staples=staples,
+        flavor_profile=prefs.flavor_profile(),
+        craving_history=prefs.craving_history(),
     )
 
 
@@ -72,6 +74,10 @@ async def update_my_preferences(
         prefs.include_pantry_staples = body.include_pantry_staples
     if body.pantry_staples is not None:
         prefs.pantry_staples_json = json.dumps(body.pantry_staples)
+    if body.flavor_profile is not None:
+        prefs.flavor_profile_json = json.dumps(body.flavor_profile)
+    if body.craving_history is not None:
+        prefs.craving_history_json = json.dumps(body.craving_history)
     await db.commit()
     await db.refresh(prefs)
     return _to_response(prefs)

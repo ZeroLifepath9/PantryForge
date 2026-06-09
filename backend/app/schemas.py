@@ -38,6 +38,8 @@ class PreferencesResponse(BaseModel):
     explain_techniques: bool = True
     include_pantry_staples: bool = True
     pantry_staples: list[str] = []
+    flavor_profile: dict = {}
+    craving_history: list[dict] = []
 
 
 class PreferencesUpdate(BaseModel):
@@ -48,6 +50,8 @@ class PreferencesUpdate(BaseModel):
     explain_techniques: bool | None = None
     include_pantry_staples: bool | None = None
     pantry_staples: list[str] | None = None
+    flavor_profile: dict | None = None
+    craving_history: list[dict] | None = None
 
 
 class ParseIngredientsRequest(BaseModel):

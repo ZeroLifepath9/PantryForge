@@ -1,10 +1,13 @@
+from datetime import datetime
+import json
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.deps import get_optional_user
-from app.models import User
+from app.models import User, UserPreferences
 from app.schemas import (
     CravingParsed,
     CravingSearchRequest,
@@ -52,13 +55,26 @@ async def parse_ingredients_endpoint(body: ParseIngredientsRequest):
 
 
 @router.post("/craving", response_model=CravingSearchResponse)
-async def search_craving_endpoint(body: CravingSearchRequest):
+async def search_craving_endpoint(
+    body: CravingSearchRequest,
+    current_user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
     protein_filter = body.protein_filter
     protein_filters = body.protein_filters or []
     if protein_filter and protein_filter not in protein_filters:
         protein_filters = [protein_filter, *protein_filters]
     elif not protein_filter and protein_filters:
         protein_filter = protein_filters[0]
+
+    # Load user's background flavor profile + history for blending with current input
+    user_flavor_profile = {}
+    craving_history = []
+    if current_user:
+        from app.api.preferences import _get_or_create_prefs
+        prefs = await _get_or_create_prefs(current_user.id, db)
+        user_flavor_profile = prefs.flavor_profile()
+        craving_history = prefs.craving_history()[-5:]  # recent past inputs
 
     payload, is_mock = await search_by_craving(
         body.what_sounds_good,
@@ -70,10 +86,36 @@ async def search_craving_endpoint(body: CravingSearchRequest):
         diets=body.diets,
         intolerances=body.intolerances,
         health_conditions=body.health_conditions,
+        user_flavor_profile=user_flavor_profile,
+        craving_history=craving_history,
     )
     parsed_raw = payload["parsed"]
     bridge = parsed_raw.get("shared_bridge") or payload.get("shared_bridge")
     threads = payload.get("craving_threads") or parsed_raw.get("craving_threads") or []
+
+    # Background: start/update user flavor profile with current input + derived (if user exists)
+    if current_user:
+        from app.api.preferences import _get_or_create_prefs
+        prefs = await _get_or_create_prefs(current_user.id, db)
+        current_fp = parsed_raw.get("flavor_profile") or {}
+        if isinstance(current_fp, str):
+            current_fp = {"description": current_fp}
+        derived = parsed_raw.get("derived_flavor_profile") or current_fp
+        if isinstance(derived, str):
+            derived = {"description": derived}
+
+        new_history = (craving_history or []) + [{
+            "what_sounds_good": body.what_sounds_good,
+            "flavor_profile": current_fp,
+            "derived_flavor_profile": derived,
+            "timestamp": datetime.utcnow().isoformat(),
+        }]
+        new_history = new_history[-5:]
+
+        prefs.flavor_profile_json = json.dumps(derived)
+        prefs.craving_history_json = json.dumps(new_history)
+        await db.commit()
+
     return CravingSearchResponse(
         what_sounds_good=payload["what_sounds_good"],
         parsed=CravingParsed(**parsed_raw),

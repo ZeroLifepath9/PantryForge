@@ -21,9 +21,9 @@ PAGE_SIZE = 20
 
 GROK_PICK = """You are the executive chef judge on a reality cooking competition (Top Chef / Iron Chef energy).
 
-The home cook described a *flavor profile* (taste, texture, heat, savoriness, vibe) using keywords, a protein (or proteins), flavors, mood, and style examples. You receive REAL recipes scraped from AllRecipes.com — titles and URLs only.
+The home cook described a *flavor profile* using the current input + their past inputs/history (see derived_flavor_profile, user_past_flavor_profile, past_cravings_summary). You receive REAL recipes scraped from AllRecipes.com — titles and URLs only.
 
-Your job: curate a rich, expanded *array of options* (15-25 MAIN COURSES, aim for ~18-20 high-quality ones) where **every single recipe reflects the same core flavor profile** in different ways. The lineup should feel like a menu of varied choices that all scratch the exact same flavor itch the user described.
+Your job: curate a rich, expanded *array of options* (15-25 MAIN COURSES) **inspired by the derived flavor profile from the user's past inputs AND the current input**. Explicitly parse and present recipes for *all* options mentioned (e.g. tacos, gumbo, chili, Mexican spicy) as distinct but profile-unified recipes. The array must cover every major element from current + past.
 
 Priorities (in order):
 1. Protein-forward: Every main must prominently feature and use the requested protein(s) as the star (e.g. chicken breast, salmon fillet, tofu steaks, beef strips — not buried in sauce or optional).
@@ -46,11 +46,11 @@ Output ONLY valid JSON:
 }
 
 RULES:
-- 15-25 strong picks (target 18-20). Deliver volume for a rich *array of flavor-reflecting options*. Quality first.
+- 15-25 strong picks. The array must explicitly include options for *all* parsed elements from current input + past (tacos AND gumbo AND chili AND Mexican spicy etc.), each as a recipe inspired by the derived blended flavor profile.
 - URLs must come from the provided list — do not invent recipes.
 - Reject sauces-only, dips, news articles, grocery promos, unrelated dishes, or anything that does not center the protein.
-- Every pick must clearly use the protein and strongly reflect the flavor_profile from what_sounds_good and the plan. If a dish perfectly captures the flavor even from a different cuisine or form (e.g. a spicy gumbo-style stew or Asian chili for a Mexican spicy craving), include it with clear explanation in fit_note.
-- Do not collapse the lineup to one dominant dish (e.g. only chili). The entire array must reflect the full flavor profile described.
+- Every pick must clearly use the protein and reflect the derived_flavor_profile (from past + current). Use past_cravings_summary to make it personal/evolving.
+- Do not latch to or over-represent only one input (e.g. chili). Give balanced coverage of the full flavor profile as a menu of options. fit_note must note which element(s) it draws from and how it fits the user's history.
 - Prefer popular, highly-rated home-cook versions (higher rating_count when available).
 - Do not force exactly 20 if there are not enough strong matches — but expand generously when the scraped list supports it. Protein + keyword fidelity beats filler.
 - Focus on mains the user can cook at home that capture the restaurant-style experience they described."""
@@ -156,6 +156,9 @@ async def _grok_pick_lineup(
         "protein_filters": protein_filters,
         "dish_anchor": plan.get("dish_anchor"),
         "flavor_profile": plan.get("flavor_profile", ""),
+        "derived_flavor_profile": plan.get("derived_flavor_profile", plan.get("flavor_profile", "")),
+        "past_cravings_summary": plan.get("past_cravings_summary", ""),
+        "user_past_flavor_profile": plan.get("user_past_flavor_profile", {}),
         "candidates": slim,
         "target_count": limit,
     }
@@ -203,6 +206,8 @@ async def search_craving_lineup(
     diets: list[str] | None = None,
     intolerances: list[str] | None = None,
     health_conditions: list[str] | None = None,
+    user_flavor_profile: dict | None = None,
+    craving_history: list[dict] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     diets = diets or []
     intolerances = intolerances or []
@@ -223,6 +228,23 @@ async def search_craving_lineup(
     plan["diets"] = diets
     plan["intolerances"] = intolerances
     plan["health_conditions"] = health_conditions
+
+    # Blend current input with user's past flavor profile / history for "inspired by derived profile from past + current"
+    past_summary = ""
+    if craving_history:
+        past_summary = "; ".join([h.get("what_sounds_good", "") for h in craving_history[-3:]])
+    if user_flavor_profile:
+        plan["user_past_flavor_profile"] = user_flavor_profile
+        plan["past_cravings_summary"] = past_summary
+        # Derive blended for this search
+        current_fp = plan.get("flavor_profile", "")
+        past_fp = user_flavor_profile.get("description", "") or user_flavor_profile.get("flavor_profile", "")
+        if past_fp and current_fp:
+            plan["derived_flavor_profile"] = f"User's evolving flavor profile: {past_fp}. Current craving adds: {current_fp}. Combined: spicy Mexican-inspired with taco, chili, and gumbo elements, hearty and bold."
+        else:
+            plan["derived_flavor_profile"] = current_fp or past_fp
+    else:
+        plan["derived_flavor_profile"] = plan.get("flavor_profile", "")
 
     queries = _search_queries(plan)
     if not queries:
