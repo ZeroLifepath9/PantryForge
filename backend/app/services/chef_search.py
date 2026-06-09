@@ -6,7 +6,7 @@ from typing import Any
 
 from app.services.grok_recipes import search_craving_lineup
 
-PAGE_SIZE = 12
+PAGE_SIZE = 20
 
 
 async def chef_search(

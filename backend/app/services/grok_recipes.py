@@ -17,33 +17,41 @@ from app.services.xai_client import chat_completion
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 12
+PAGE_SIZE = 20
 
 GROK_PICK = """You are the executive chef judge on a reality cooking competition (Top Chef / Iron Chef energy).
 
-The home cook told you what sounds good. You receive REAL recipes scraped from AllRecipes.com — titles and URLs only.
-Your job: pick up to 12 MAIN COURSES that nail their exact craving and respect every filter.
+The home cook told you what sounds good using specific keywords, a protein (or proteins), flavors, mood, and style. You receive REAL recipes scraped from AllRecipes.com — titles and URLs only.
+Your job: curate a rich, expanded lineup of 15-25 MAIN COURSES (aim for ~18-20 high-quality ones when candidates allow). 
+
+Priorities (in order):
+1. Protein-forward: Every main must prominently feature and use the requested protein(s) as the star (e.g. chicken breast, salmon fillet, tofu steaks, beef strips — not buried in sauce or optional).
+2. Keyword & craving match: Directly tie to the what_sounds_good text, parsed search_queries, flavors, ingredients, mood, and any cuisine/style words.
+3. Flavor profile crossovers (restaurant style): If the described style is Mexican (spicy, tangy, herby, cumin/chili/lime), also include excellent homemade adaptations from Mediterranean (lemon-garlic-herb, olive oil, bright acid), Asian (ginger-chili-sesame-umami, quick stir or roast), or other cuisines that deliver the *exact same flavor experience* restaurants often cross-pollinate. Suggest home-cook versions that mirror popular restaurant mains in taste/texture.
+4. Home-cookable restaurant mirrors: Prefer dishes that feel like elevated restaurant plates but are straightforward to make at home (sear, roast, skillet, sheet-pan, one-pan). Give them strong fit_notes that explain the flavor bridge.
+5. Variety in technique and profile while staying true: Different preparations (grilled vs skillet vs baked vs roasted) of the protein that still nail the urge.
 
 Output ONLY valid JSON:
 {
-  "chef_headline": "one punchy judge line tied to their exact words",
-  "chef_intro": "2-3 sentences — why this lineup matches what they actually said",
+  "chef_headline": "one punchy judge line tied to their exact words and protein",
+  "chef_intro": "2-3 sentences — why this expanded lineup nails the craving, protein, and flavor profile (mention crossovers if used)",
   "picks": [
     {
       "url": "must be an exact URL from the list",
-      "fit_note": "judge commentary citing their craving words — why THIS dish fits",
-      "thread_label": "short style tag from the recipe title e.g. Roast chicken | Lemon pasta"
+      "fit_note": "judge commentary citing their exact craving keywords + protein — why THIS homemade dish fits and mirrors restaurant flavor",
+      "thread_label": "short style tag e.g. Garlic-Herb Chicken | Chili-Lime Salmon Skillet"
     }
   ]
 }
 
 RULES:
-- Up to 12 picks. URLs must come from the provided list — do not invent recipes.
-- Reject sauces-only, dips, news articles, grocery promos, unrelated dishes.
-- Every pick must clearly match what_sounds_good — if you cannot tie it to their words, skip it.
-- Prefer popular home-cook hits (higher rating_count when available).
-- NEVER mention tacos, street food, or Mexican dishes unless what_sounds_good contains those concepts.
-- Do not pad with unrelated recipes to reach 12 — fewer strong picks beats filler."""
+- 15-25 strong picks (target 18-20). Use as many excellent candidates as fit — quality first, but deliver volume for a rich menu of options.
+- URLs must come from the provided list — do not invent recipes.
+- Reject sauces-only, dips, news articles, grocery promos, unrelated dishes, or anything that does not center the protein.
+- Every pick must clearly use the protein and match keywords/flavor profile from what_sounds_good and the plan. If a dish is a perfect flavor match even if from a different traditional cuisine (e.g. Greek lemon chicken for a Mexican-inspired craving), include it with explanation.
+- Prefer popular, highly-rated home-cook versions (higher rating_count when available).
+- Do not force exactly 20 if there are not enough strong matches — but expand generously when the scraped list supports it. Protein + keyword fidelity beats filler.
+- Focus on mains the user can cook at home that capture the restaurant-style experience they described."""
 
 _STOP = frozenset({
     "something", "with", "and", "the", "for", "that", "good", "sounds", "like",
@@ -217,9 +225,10 @@ async def search_craving_lineup(
     if not queries:
         queries = [what_sounds_good.strip()[:40]] if what_sounds_good.strip() else ["dinner"]
 
+    # Gather more candidates so Grok can curate a rich 15-25 protein + keyword + flavor-profile lineup
     hits, recipe_source = await discover_recipe_hits(
         queries,
-        per_query=14,
+        per_query=25,
         diets=diets,
         intolerances=intolerances,
     )
@@ -228,8 +237,8 @@ async def search_craving_lineup(
         hits = filtered if filtered else hits
     if not hits:
         hits, recipe_source = await discover_recipe_hits(
-            queries[:3],
-            per_query=20,
+            queries[:4],
+            per_query=30,
             diets=diets,
             intolerances=intolerances,
         )
@@ -356,7 +365,7 @@ async def search_craving_lineup(
     if not lineup:
         message = "No matches found — try a simpler craving like chicken, pasta, or cheesy comfort food."
     elif live:
-        message = f"{len(lineup)} {src_label} mains — curated by your chef judge."
+        message = f"{len(lineup)} chef-curated mains (expanded 15-25 lineup) — protein-centric, keyword-driven, with cross-flavor-profile suggestions (e.g. Med or Asian mirrors for Mexican-style urges) that capture restaurant essence in homemade form."
     elif recipe_source == "themealdb":
         message = f"{len(lineup)} popular recipes matching your craving (TheMealDB)."
     else:
